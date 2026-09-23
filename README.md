@@ -228,6 +228,13 @@ The analysis provides:
     `[TOOL1] [TOOL2]` are optional specialized analysis tools (e.g. clang-tidy). Basic development tools (git, gcc, make, editors) are not listed.
   - An AI assistant that finds a bug must also fix it. It must build and verify the fix, and state explicitly what could not be built or tested.
 
+## License
+
+BackPainLess is free software distributed under the GNU General Public License, version 3 or (at your option) any
+later version, like PaInleSS on which it is based. See [LICENSE](./LICENSE) for the copyright notices and
+[COPYING](./COPYING) for the full license text. The vendored solvers and libraries in `solvers/` and `libs/` keep their
+own licenses.
+
 ### References
 
 BackPainLess is based on Painless and D-Painless:
