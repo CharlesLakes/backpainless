@@ -1,7 +1,6 @@
 #include "HordeSatSharing.hpp"
 #include "painless.hpp"
 #include "sharing/Filters/BloomFilter.hpp"
-#include "solvers/SolverFactory.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Parameters.hpp"
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../solvers/SolverInterface.hpp"
+#include "solvers/BackboneSolverInterface.hpp"
 #include "utils/Threading.hpp"
 #include "working/WorkingStrategy.hpp"
 
@@ -17,13 +17,13 @@ mainWorker(void* arg);
 class SequentialWorker : public WorkingStrategy
 {
   public:
-	SequentialWorker(std::shared_ptr<SolverInterface> solver_);
+	SequentialWorker(std::shared_ptr<BackboneSolverInterface> solver_);
 
 	~SequentialWorker();
 
 	void solve(const std::vector<int>& cube);
 
-	void join(WorkingStrategy* winner, SatResult res, const std::vector<int>& model);
+	void join(WorkingStrategy* winner, BackboneResult res, const std::vector<int>& backbone);
 
 	void setSolverInterrupt();
 
@@ -31,7 +31,7 @@ class SequentialWorker : public WorkingStrategy
 
 	void waitInterrupt();
 
-	std::shared_ptr<SolverInterface> solver;
+	std::shared_ptr<BackboneSolverInterface> solver;
 
   protected:
 	friend void* mainWorker(void* arg);

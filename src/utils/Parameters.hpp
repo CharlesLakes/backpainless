@@ -21,16 +21,21 @@
 	PARAM(cpus, int, "c", 0, "Number of solver threads to launch (0 = std::thread::hardware_concurrency)")             \
 	PARAM(timeout, int, "t", -1, "Timeout in seconds")                                                                 \
 	PARAM(verbosity, int, "v", 0, "Verbosity level")                                                                   \
-	PARAM(test, bool, "test", false, "Use Test working strategy")                                                      \
-	PARAM(noModel, bool, "no-model", false, "Disable model output")                                                    \
-	PARAM(enableDistributed, bool, "dist", false, "Enable distributed solving, thus initializes MPI")                  \
+	PARAM(noBackbone, bool, "no-backbone", false, "Only report the status of the formula, not the backbone")              \
+	PARAM(enableDistributed, bool, "dist", false, "Enable distributed solving, thus initializes MPI")                     \
                                                                                                                        \
-	CATEGORY("Portfolio")                                                                                              \
-	PARAM(solver, std::string, "solver", "kcl", "Portfolio of solvers")                                                \
-	PARAM(prs, bool, "prs", false, "Use PortfolioPRS")                                                                 \
-	PARAM(enableMallob, bool, "mallob", false, "Emulate Mallob's Sharing Strategy In PortfolioSimple")                 \
-	PARAM(sbvaPostLocalSearchers, int, "ls-after-sbva", 2, "(PortfolioSBVA) Local search solvers after SBVA")          \
-	PARAM(maxDivNoise, int, "max-div-noise", 1000, "Maximum noise for random engine in diversification")               \
+	CATEGORY("Backbone")                                                                                                  \
+	PARAM(backboneChunkRate,                                                                                              \
+		  int,                                                                                                               \
+		  "bb-chunk",                                                                                                        \
+		  0,                                                                                                                 \
+		  "Chunk rate K of the constraint (0 = all candidates, 1 = one-by-one, 10 = cadiback --chunking)")                   \
+	PARAM(backboneNoFlip, bool, "bb-no-flip", false, "Do not drop flippable literals from the backbone candidates")       \
+                                                                                                                       \
+	CATEGORY("Portfolio")                                                                                                 \
+	PARAM(solver, std::string, "solver", "c", "Portfolio of backbone solvers")                                            \
+	PARAM(enableMallob, bool, "mallob", false, "Emulate Mallob's Sharing Strategy In PortfolioSimple")                    \
+	PARAM(defaultClauseBufferSize, int, "default-clsbuff-size", 1000, "Default ClauseBuffer size")                        \
 	PARAM(gaInitPeriod,                                                                                                \
 		  int,                                                                                                         \
 		  "ga-init",                                                                                                   \
@@ -46,29 +51,6 @@
 		  "ga-cross-rate",                                                                                             \
 		  0.5f,                                                                                                        \
 		  "The crossover rate (probability), i.e chances to create a crossover point")                                 \
-                                                                                                                       \
-	CATEGORY("Solving")                                                                                                \
-	PARAM(glucoseSplitHeuristic, int, "glc-split-heur", 1, "Split heuristic")                                          \
-	PARAM(defaultClauseBufferSize, int, "default-clsbuff-size", 1000, "Default ClauseBuffer size")                     \
-	PARAM(localSearchFlips, int, "ls-flips", -1, "Number of local search flips")                                       \
-                                                                                                                       \
-	CATEGORY("Preprocessing")                                                                                          \
-	SUBCATEGORY("PRS options")                                                                                         \
-	PARAM(prsCircuitVar, int, "prs-circuit-var", 100'000, "PRS circuit variable limit")                                \
-	PARAM(prsGaussVar, int, "prs-gauss-var", 100'000, "PRS Gauss variable limit")                                      \
-	PARAM(prsCardVar, int, "prs-card-var", 100'000, "PRS cardinality variable limit")                                  \
-	PARAM(prsCircuitCls, int, "prs-circuit-cls", 1'000'000, "PRS circuit clause limit")                                \
-	PARAM(prsGaussClsSize, int, "prs-gauss-cls-size", 6, "PRS Gauss clause size limit")                                \
-	PARAM(prsGaussCls, int, "prs-gauss-cls", 1'000'000, "PRS Gauss clause limit")                                      \
-	PARAM(prsBinCls, int, "prs-bin-cls", 10'000'000, "PRS binary clause limit")                                        \
-	PARAM(prsCardCls, int, "prs-card-cls", 1'000'000, "PRS cardinality clause limit")                                  \
-                                                                                                                       \
-	SUBCATEGORY("SBVA")                                                                                                \
-	PARAM(sbvaTimeout, int, "sbva-timeout", 500, "SBVA timeout")                                                       \
-	PARAM(sbvaCount, int, "sbva-count", 12, "SBVA threads count")                                                      \
-	PARAM(sbvaMaxClause, int, "sbva-max-clause", 10'000'000, "SBVA maximum clause count")                              \
-	PARAM(sbvaMaxAdd, int, "sbva-max-add", 0, "SBVA maximum additions (0 = unlimited)")                                \
-	PARAM(sbvaNoShuffle, bool, "no-sbva-shuffle", false, "Disable SBVA shuffle")                                       \
                                                                                                                        \
 	CATEGORY("Sharing")                                                                                                \
 	PARAM(maxClauseSize, int, "max-cls-size", 60, "Maximum size of clauses to be added in ClauseDatabase")             \
@@ -133,62 +115,22 @@ extern Parameters __globalParameters__;
 
 #define DETAILED_HELP_PORTFOLIO                                                                                        \
 	BLUE "The solver parameter " YELLOW "(-solver=<string>)" BLUE " accepts the following characters:\n" RESET         \
-		 " " BOLD "g" RESET " - Glucose Syrup solver\n"                                                                \
-		 " " BOLD "l" RESET " - Lingeling solver\n"                                                                    \
-		 " " BOLD "M" RESET " - MapleCOMSPS solver\n"                                                                  \
-		 " " BOLD "m" RESET " - Minisat solver\n"                                                                      \
-		 " " BOLD "I" RESET " - Kissat INC solver\n"                                                                   \
-		 " " BOLD "K" RESET " - Kissat MAB (Multi-Armed Bandit) solver\n"                                              \
-		 " " BOLD "k" RESET " - Kissat solver\n"                                                                       \
-		 " " BOLD "c" RESET " - CaDiCaL solver\n"                                                                      \
-		 " " BOLD "y" RESET " - YalSAT local search solver\n"                                                          \
-		 " " BOLD "t" RESET " - TaSSAT local search solver\n"                                                          \
+		 " " BOLD "c" RESET " - CadiBack backbone solver (CaDiCaL)\n"                                                  \
 		 "\n" BLUE "Import Database Types " YELLOW "(-importDB=<char>)" RESET " :\n" DETAILED_HELP_DATABASES "\n"      \
-		 "Working strategies:\n" RESET " " BOLD "Simple Portfolio" RESET                                               \
-		 " (the default strategy): Run solvers in parallel with diversified configurations\n"                          \
-		 " " BOLD "PRS Portfolio" RESET " (" YELLOW "-prs=true" RESET                                                  \
-		 "): Mimics the parallelization strategy of the PRS framework, with different and "                            \
-		 "separated groups of solvers all preceeded by the different preprocessing techniques defined in the PRS "     \
-		 "framework\n"                                                                                                 \
-		 "\n" BOLD "Example:" RESET " " YELLOW "-solver=gkMcy" RESET                                                   \
-		 " creates a portfolio by instantiating periodically 1 Glucose, 1 Kissat, 1 MapleCOMSPS, 1 CaDiCaL, and 1 "    \
-		 "YalSat solver until the number specified by " YELLOW "-c=<int>" RESET " is reached \n"                       \
-		 "\n" BLUE "Diversification:\n" RESET "  " YELLOW "-max-div-noise" RESET                                       \
-		 ": Sets maximum noise for random diversification between solvers\n"                                           \
-		 "  Higher values create more diverse solver configurations\n"                                                 \
-		 "\n" FUNC_STYLE                                                                                               \
-		 "Note: Solver availability depends on compile-time options (GLUCOSE_, LINGELING_, etc.)\n" RESET
+		 "Working strategy:\n" RESET " " BOLD "Simple Portfolio" RESET                                                 \
+		 ": Run backbone solvers in parallel with diversified configurations, sharing learnt clauses\n"               \
+		 "\n" BOLD "Example:" RESET " " YELLOW "-solver=c -c=8" RESET                                                  \
+		 " creates a portfolio of 8 diversified CadiBack solvers\n"
 
-#define DETAILED_HELP_SOLVING                                                                                          \
-	BLUE "Glucose specific options:\n" RESET "  " YELLOW "-glc-split-heur" RESET                                       \
-		 ": Sets the split heuristic in Glucose (1-4)\n"                                                               \
-		 "    " BOLD "1" RESET ": No splitting (default)\n"                                                            \
-		 "    " BOLD "2" RESET ": Split randomly\n"                                                                    \
-		 "    " BOLD "3" RESET ": Split by activity\n"                                                                 \
-		 "    " BOLD "4" RESET ": Split by phase\n"                                                                    \
-		 "\n" BLUE "Local Search:\n" RESET "  " YELLOW "-ls-flips" RESET ": Number of local search flips (" GREEN      \
-		 "-1" RESET " = use default)\n"
-
-#define DETAILED_HELP_PREPROCESSING                                                                                    \
-	BLUE "SBVA (Structured Binary Variable Addition):\n" RESET                                                         \
-		 "  A preprocessing technique that identifies and optimizes structured patterns\n"                             \
-		 "  in the formula by introducing new variables to represent common substructures.\n"                          \
-		 "\n"                                                                                                          \
-		 "  " YELLOW "-sbva-timeout" RESET ": Maximum processing time in seconds (" GREEN "500" RESET ")\n"            \
-		 "  " YELLOW "-sbva-count" RESET ": Number of parallel SBVA threads (" GREEN "12" RESET ")\n"                  \
-		 "  " YELLOW "-sbva-max-clause" RESET ": Maximum clauses for SBVA to process (" GREEN "10,000,000" RESET ")\n" \
-		 "  " YELLOW "-sbva-max-add" RESET ": Maximum variable additions (" GREEN "0" RESET " = unlimited)\n"          \
-		 "  " YELLOW "-no-sbva-shuffle" RESET ": Disable random shuffling during SBVA\n"                               \
-		 "\n" BLUE "PRS Preprocessing Techniques Details:\n" RESET "  " YELLOW "-prs-circuit-var" RESET                \
-		 ": Circuit variable threshold (" GREEN "100,000" RESET ")\n"                                                  \
-		 "  " YELLOW "-prs-gauss-var" RESET ": Gaussian elimination variable threshold (" GREEN "100,000" RESET ")\n"  \
-		 "  " YELLOW "-prs-card-var" RESET ": Cardinality constraint variable threshold (" GREEN "100,000" RESET ")\n" \
-		 "  " YELLOW "-prs-circuit-cls" RESET ": Circuit clause threshold (" GREEN "1,000,000" RESET ")\n"             \
-		 "  " YELLOW "-prs-gauss-cls-size" RESET ": Gaussian elimination clause size threshold (" GREEN "6" RESET      \
-		 ")\n"                                                                                                         \
-		 "  " YELLOW "-prs-gauss-cls" RESET ": Gaussian elimination clause threshold (" GREEN "1,000,000" RESET ")\n"  \
-		 "  " YELLOW "-prs-bin-cls" RESET ": Binary clause threshold (" GREEN "10,000,000" RESET ")\n"                 \
-		 "  " YELLOW "-prs-card-cls" RESET ": Cardinality constraint clause threshold (" GREEN "1,000,000" RESET ")\n"
+#define DETAILED_HELP_BACKBONE                                                                                         \
+	BLUE "Backbone extraction (CadiBack algorithm):\n" RESET "  " YELLOW "-bb-chunk" RESET                             \
+		 ": Number of candidates negated in each constraint\n"                                                        \
+		 "    " BOLD "0" RESET ": all remaining candidates (default, as cadiback)\n"                                  \
+		 "    " BOLD "1" RESET ": one-by-one\n"                                                                       \
+		 "    " BOLD "K" RESET ": reset to 1 after a SAT answer, multiplied by K after an UNSAT answer\n"             \
+		 "  " YELLOW "-bb-no-flip" RESET ": Do not use flippable literals to drop candidates\n"                       \
+		 "\n" BLUE "Output:\n" RESET "  'b <lit>' lines followed by 'b 0' (disable with " YELLOW "-no-backbone" RESET \
+		 ")\n"
 
 #define DETAILED_HELP_SHARING                                                                                          \
 	BLUE "Local Sharing Strategies " YELLOW "(-shr-strat)" BLUE ":\n" RESET "  " BOLD "1" RESET                        \
@@ -212,8 +154,8 @@ extern Parameters __globalParameters__;
 		 "  " YELLOW "-v" RESET ": Verbosity level (" GREEN "0-5" RESET ")\n"                                          \
 		 "\n" BLUE "Distributed solving:\n" RESET "  " YELLOW "-dist" RESET ": Enable distributed solving using MPI\n" \
 		 "  Each node runs its own solvers and participates in global clause sharing\n"                                \
-		 "\n" BLUE "Output options:\n" RESET "  " YELLOW "-no-model" RESET                                             \
-		 ": Only report satisfiability, not the model\n"
+		 "\n" BLUE "Output options:\n" RESET "  " YELLOW "-no-backbone" RESET                                          \
+		 ": Only report the status of the formula, not the backbone\n"
 /**
  * @} // end of utils group
  */

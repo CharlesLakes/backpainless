@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include "../solvers/SolverInterface.hpp"
 #include "containers/ClauseUtils.hpp"
 #include "containers/Formula.hpp"
 #include <algorithm>

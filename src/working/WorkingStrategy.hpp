@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "solvers/SolverInterface.hpp"
+#include "containers/BackboneResult.hpp"
 
 #include <vector>
 
@@ -21,7 +21,7 @@ class WorkingStrategy
 
 	virtual void solve(const std::vector<int>& cube) = 0;
 
-	virtual void join(WorkingStrategy* winner, SatResult res, const std::vector<int>& model) = 0;
+	virtual void join(WorkingStrategy* winner, BackboneResult res, const std::vector<int>& backbone) = 0;
 
 	virtual void setSolverInterrupt() = 0;
 

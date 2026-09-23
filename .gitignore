@@ -1,5 +1,6 @@
 *.o
 *.cnf
+!examples/*.cnf
 *.log
 parameters.sh
 outputs
@@ -7,6 +8,8 @@ inputs
 painless-mcomsps
 painless
 painlessd
+backpainless
+backpainlessd
 docs/build
 docs/source/html
 html

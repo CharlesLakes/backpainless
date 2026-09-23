@@ -3,10 +3,10 @@ nb_physical_cores=$(lscpu | grep ^Core\(s\)\\sper\\ssocket:\\s | awk '{print $4}
 # used by both
 nb_solvers=$nb_physical_cores # the remaning one for sharer
 
-# painless only
+# backpainless only
 verbose=1
 timeout=500
-solver="kc"
+solver="c"
 lstrat=-1
 gstrat=2
 shr_sleep=500000

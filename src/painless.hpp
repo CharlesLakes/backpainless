@@ -1,6 +1,6 @@
 #pragma once
 
-#include "solvers/SolverInterface.hpp"
+#include "containers/BackboneResult.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -17,10 +17,10 @@ extern std::mutex mutexGlobalEnd;
 extern std::condition_variable condGlobalEnd;
 
 /// Final result
-extern std::atomic<SatResult> finalResult;
+extern std::atomic<BackboneResult> finalResult;
 
-/// Model for SAT instances
-extern std::vector<int> finalModel;
+/// Backbone literals of the formula (valid when finalResult is COMPLETE)
+extern std::vector<int> finalBackbone;
 
 /// To check if painless is using distributed mode
 extern std::atomic<bool> dist;
