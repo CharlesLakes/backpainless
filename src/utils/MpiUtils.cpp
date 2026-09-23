@@ -231,34 +231,34 @@ sendFormula(std::vector<simpleClause>& clauses, unsigned int* varCount, int root
 }
 
 void
-sendModelToRoot()
+sendBackboneToRoot()
 {
-	if (mpi_winner == 0 || finalResult != SatResult::SAT)
+	if (mpi_winner == 0 || finalResult != BackboneResult::COMPLETE)
 		return;
 
-	LOG1("Model to root mpi_winner=%d, finalResult=%d", mpi_winner, static_cast<int>(finalResult.load()));
+	LOG1("Backbone to root mpi_winner=%d, finalResult=%d", mpi_winner, static_cast<int>(finalResult.load()));
 
 	MPI_Status status;
 
 	if (mpi_rank == mpi_winner) {
-		LOG1("Winner %d sending model of size %d", mpi_winner, finalModel.size());
-		TESTRUNMPI(MPI_Send(finalModel.data(), finalModel.size(), MPI_INT, 0, MYMPI_MODEL, MPI_COMM_WORLD));
+		LOG1("Winner %d sending backbone of size %d", mpi_winner, finalBackbone.size());
+		TESTRUNMPI(MPI_Send(finalBackbone.data(), finalBackbone.size(), MPI_INT, 0, MYMPI_BACKBONE, MPI_COMM_WORLD));
 	}
 
 	else if (0 == mpi_rank) {
 		int size;
-		LOGDEBUG1("Root is waiting for model");
+		LOGDEBUG1("Root is waiting for the backbone");
 
-		TESTRUNMPI(MPI_Probe(mpi_winner, MYMPI_MODEL, MPI_COMM_WORLD, &status));
+		TESTRUNMPI(MPI_Probe(mpi_winner, MYMPI_BACKBONE, MPI_COMM_WORLD, &status));
 		TESTRUNMPI(MPI_Get_count(&status, MPI_INT, &size));
 
 		assert(mpi_winner == status.MPI_SOURCE);
-		assert(MYMPI_MODEL == status.MPI_TAG);
+		assert(MYMPI_BACKBONE == status.MPI_TAG);
 
-		finalModel.resize(size);
+		finalBackbone.resize(size);
 
-		TESTRUNMPI(MPI_Recv(finalModel.data(), size, MPI_INT, mpi_winner, MYMPI_MODEL, MPI_COMM_WORLD, &status));
-		LOG1("Root received a model of size %d", size);
+		TESTRUNMPI(MPI_Recv(finalBackbone.data(), size, MPI_INT, mpi_winner, MYMPI_BACKBONE, MPI_COMM_WORLD, &status));
+		LOG1("Root received a backbone of size %d", size);
 	}
 
 	mpi_winner = 0;

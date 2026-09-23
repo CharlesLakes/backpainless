@@ -4,7 +4,7 @@
 #include "sharing/SharingStatistics.hpp"
 #include "sharing/SharingStrategy.hpp"
 
-#include "solvers/SolverInterface.hpp"
+#include "containers/BackboneResult.hpp"
 
 #include <mpi.h>
 
@@ -91,9 +91,9 @@ class GlobalSharingStrategy : public SharingStrategy
 	 * @brief Handles the process of joining when a solution is found.
 	 * @param winnerRank The rank of the process that found the solution.
 	 * @param res The result of the SAT solving process.
-	 * @param model The satisfying assignment, if any.
+	 * @param backbone The backbone literals, if the backbone was computed.
 	 */
-	virtual void joinProcess(int winnerRank, SatResult res, const std::vector<int>& model);
+	virtual void joinProcess(int winnerRank, BackboneResult res, const std::vector<int>& backbone);
 
 	/**
 	 * @brief Prints the statistics of the sharing strategy.

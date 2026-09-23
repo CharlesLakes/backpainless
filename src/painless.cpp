@@ -7,9 +7,6 @@
 #include "utils/Parsers.hpp"
 #include "utils/System.hpp"
 
-#include "solvers/SolverFactory.hpp"
-
-#include "working/PortfolioPRS.hpp"
 #include "working/PortfolioSimple.hpp"
 
 #include <random>
@@ -67,9 +64,9 @@ WorkingStrategy* working = NULL;
 
 std::atomic<bool> dist = false;
 
-std::atomic<SatResult> finalResult = SatResult::UNKNOWN;
+std::atomic<BackboneResult> finalResult = BackboneResult::UNKNOWN;
 
-std::vector<int> finalModel;
+std::vector<int> finalBackbone;
 
 // -------------------------------------------
 // Main of the framework
@@ -116,8 +113,6 @@ main(int argc, char** argv)
 	// to make sure that the broadcast is done when main has done its wait
 
 	working = new PortfolioSimple();
-	// working = new PortfolioPRS();
-	// working = new Test();
 
 	// Launch working
 	std::vector<int> cube;
@@ -147,10 +142,10 @@ main(int argc, char** argv)
 
 		if ((unsigned int)SystemResourceMonitor::getRelativeTimeSeconds() >= __globalParameters__.timeout &&
 			finalResult ==
-				SatResult::UNKNOWN) // if __globalParameters__.timeout set globalEnding otherwise a solver woke me up
+				BackboneResult::UNKNOWN) // if __globalParameters__.timeout set globalEnding otherwise a solver woke me up
 		{
 			globalEnding = true;
-			finalResult = SatResult::TIMEOUT;
+			finalResult = BackboneResult::TIMEOUT;
 		}
 	} else {
 		// no __globalParameters__.timeout waiting
@@ -172,23 +167,24 @@ main(int argc, char** argv)
 	}
 
 	if (mpi_rank == mpi_winner) {
-		if (finalResult == SatResult::SAT) {
+		if (finalResult == BackboneResult::COMPLETE) {
 			logSolution("SATISFIABLE");
+			LOGSTAT("Backbone size: %zu", finalBackbone.size());
 
-			if (__globalParameters__.noModel == false) {
-				logModel(finalModel);
+			if (__globalParameters__.noBackbone == false) {
+				logBackbone(finalBackbone);
 			}
-		} else if (finalResult == SatResult::UNSAT) {
+		} else if (finalResult == BackboneResult::UNSAT) {
 			logSolution("UNSATISFIABLE");
 		} else // if __globalParameters__.timeout or unknown
 		{
 			logSolution("UNKNOWN");
-			finalResult = SatResult::UNKNOWN;
+			finalResult = BackboneResult::UNKNOWN;
 		}
 
 		LOGSTAT("Resolution time: %f s", SystemResourceMonitor::getRelativeTimeSeconds());
 	} else
-		finalResult = SatResult::UNKNOWN; /* mpi will be forced to suspend job only by the winner */
+		finalResult = BackboneResult::UNKNOWN; /* mpi will be forced to suspend job only by the winner */
 
 	LOGDEBUG1("Mpi process %d returns %d", mpi_rank, static_cast<int>(finalResult.load()));
 

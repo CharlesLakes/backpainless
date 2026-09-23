@@ -14,9 +14,9 @@ mainWorker(void* arg)
 {
 	SequentialWorker* sq = (SequentialWorker*)arg;
 
-	SatResult res = SatResult::UNKNOWN;
+	BackboneResult res = BackboneResult::UNKNOWN;
 
-	std::vector<int> model;
+	std::vector<int> backbone;
 
 	while (globalEnding == false && sq->force == false) {
 		pthread_mutex_lock(&sq->mutexStart);
@@ -41,15 +41,15 @@ mainWorker(void* arg)
 				  typeid(*(sq->solver)).name(),
 				  sq->solver->getSolverId());
 
-		if (res == SatResult::SAT) {
-			model = sq->solver->getModel();
+		if (res == BackboneResult::COMPLETE) {
+			backbone = sq->solver->getBackbone();
 		}
 
 		sq->join(NULL,
 				 res,
-				 model); // assign true to force ! No need for sq->force==false in while loop (see original painless)
+				 backbone); // assign true to force ! No need for sq->force==false in while loop (see original painless)
 
-		model.clear();
+		backbone.clear();
 
 		sq->waitJob = true;
 	}
@@ -58,7 +58,7 @@ mainWorker(void* arg)
 }
 
 // Constructor
-SequentialWorker::SequentialWorker(std::shared_ptr<SolverInterface> solver_)
+SequentialWorker::SequentialWorker(std::shared_ptr<BackboneSolverInterface> solver_)
 {
 	solver = solver_;
 	force = false;
@@ -98,7 +98,7 @@ SequentialWorker::solve(const std::vector<int>& cube)
 }
 
 void
-SequentialWorker::join(WorkingStrategy* winner, SatResult res, const std::vector<int>& model)
+SequentialWorker::join(WorkingStrategy* winner, BackboneResult res, const std::vector<int>& backbone)
 {
 	force = true;
 	LOGDEBUG1("SequentialWorker %p of solver %s is joining with res = %d.", this, typeid(*solver).name(), res);
@@ -112,15 +112,15 @@ SequentialWorker::join(WorkingStrategy* winner, SatResult res, const std::vector
 		globalEnding = true;
 		finalResult = res;
 
-		if (res == SatResult::SAT) {
-			finalModel = model;
+		if (res == BackboneResult::COMPLETE) {
+			finalBackbone = backbone;
 		}
 		mutexGlobalEnd.lock();
 		condGlobalEnd.notify_all();
 		mutexGlobalEnd.unlock();
 	} else {
 		LOGDEBUG1("SequentialWorker %p calls its parent", this);
-		parent->join(this, res, model);
+		parent->join(this, res, backbone);
 	}
 }
 

@@ -191,7 +191,7 @@ parseCNF(const char* filename, Formula& parsedFormula, const std::vector<std::un
 				}
 			}
 			if (keepClause && !parsedFormula.push_clause(std::move(cls))) {
-				finalResult = SatResult::UNSAT;
+				finalResult = BackboneResult::UNSAT;
 				LOGDEBUG1("Parse stopping because of UNSAT");
 				fclose(f);
 				return true;
