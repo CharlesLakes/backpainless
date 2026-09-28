@@ -8,6 +8,8 @@
 #include "sharing/GlobalStrategies/MallobSharing.hpp"
 
 #include "SharingStrategyFactory.hpp"
+
+#include <random>
 #include "containers/ClauseDatabases/ClauseDatabaseFactory.hpp"
 
 int SharingStrategyFactory::selectedLocal = 0;
@@ -16,10 +18,10 @@ int SharingStrategyFactory::selectedGlobal = 0;
 void
 SharingStrategyFactory::instantiateLocalStrategies(int strategyNumber,
 												   std::vector<std::shared_ptr<SharingStrategy>>& localStrategies,
-												   std::vector<std::shared_ptr<SolverCdclInterface>>& cdclSolvers)
+												   std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers)
 {
 	std::vector<std::shared_ptr<SharingEntity>> allEntities;
-	allEntities.insert(allEntities.end(), cdclSolvers.begin(), cdclSolvers.end());
+	allEntities.insert(allEntities.end(), solvers.begin(), solvers.end());
 
 	if (!allEntities.size()) {
 		LOGWARN("No SharingEntity, SharingStrategy %d will not be instantiated", strategyNumber);
@@ -54,9 +56,9 @@ SharingStrategyFactory::instantiateLocalStrategies(int strategyNumber,
 															 allEntities));
 			break;
 		case 2:
-			if (cdclSolvers.size() <= 2) {
+			if (solvers.size() <= 2) {
 				LOGERROR("Please select another sharing strategy other than 2 if you want to have %d solvers.",
-						 cdclSolvers.size());
+						 solvers.size());
 				LOGERROR("If you used -dist option, the strategies may not work");
 				exit(PWARN_LSTRAT_CPU_COUNT);
 			}
@@ -179,7 +181,7 @@ SharingStrategyFactory::launchSharers(std::vector<std::shared_ptr<SharingStrateg
 
 void
 SharingStrategyFactory::addEntitiesToLocal(std::vector<std::shared_ptr<SharingStrategy>>& localStrategies,
-										   std::vector<std::shared_ptr<SolverCdclInterface>>& newSolvers)
+										   std::vector<std::shared_ptr<BackboneSolverInterface>>& newSolvers)
 {
 	switch (SharingStrategyFactory::selectedLocal) {
 		case 1:

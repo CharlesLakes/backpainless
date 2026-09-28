@@ -59,9 +59,9 @@ MallobSharing::MallobSharing(const std::shared_ptr<ClauseDatabase>& clauseDB,
 MallobSharing::~MallobSharing() {}
 
 void
-MallobSharing::joinProcess(int winnerRank, SatResult res, const std::vector<int>& model)
+MallobSharing::joinProcess(int winnerRank, BackboneResult res, const std::vector<int>& backbone)
 {
-	this->GlobalSharingStrategy::joinProcess(winnerRank, res, model);
+	this->GlobalSharingStrategy::joinProcess(winnerRank, res, backbone);
 }
 
 bool

@@ -1,22 +1,22 @@
 
 #include "working/PortfolioSimple.hpp"
 #include "painless.hpp"
+#include "utils/ErrorCodes.hpp"
 #include "utils/Logger.hpp"
+#include "utils/MpiUtils.hpp"
 #include "utils/Parameters.hpp"
 #include "utils/System.hpp"
 #include "working/SequentialWorker.hpp"
+#include <memory>
 #include <thread>
 
 #include "containers/ClauseDatabases/ClauseDatabaseFactory.hpp"
-#include "preprocessors/PRS-Preprocessors/preprocess.hpp"
 #include "sharing/GlobalStrategies/MallobSharing.hpp"
 
 #include "preprocessors/GaspiInitializer.hpp"
 #include "sharing/SharingStrategyFactory.hpp"
-#include "solvers/SolverFactory.hpp"
+#include "solvers/BackboneSolverFactory.hpp"
 #include "utils/Parsers.hpp"
-
-#include "preprocessors/GaspiInitializer.hpp"
 
 PortfolioSimple::PortfolioSimple() {}
 
@@ -27,15 +27,7 @@ PortfolioSimple::~PortfolioSimple()
 		sharers[i]->join();
 	}
 
-	// Restore Model if preprocessors were equisatisfiable
-	if (mpi_rank <= 0 && finalResult == SatResult::SAT) {
-		for (auto it = preprocessors.rbegin(); it != preprocessors.rend(); ++it) {
-			LOGDEBUG1("preprocessor %u", std::distance(it, preprocessors.rend()) - 1);
-			(*it)->restoreModel(finalModel);
-		}
-	}
-
-	SolverFactory::printStats(this->cdclSolvers, this->localSolvers);
+	BackboneSolverFactory::printStats(this->solvers);
 
 #ifndef NDEBUG
 	for (size_t i = 0; i < slaves.size(); i++) {
@@ -55,52 +47,17 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 	strategyEnding = false;
 
 	std::vector<simpleClause> initClauses;
-	unsigned int varCount;
-	unsigned int clausesCount;
+	unsigned int varCount = 0;
 	int receivedFinalResultBcast = 0;
 
 	// TODO: merge these threads with sequential workers in next version, for less OS intensive calls
 	std::vector<std::thread> solverInitializers;
 
-	// TODO Reimplement (and separate) PRS techniques compatible with zero ended clauses, in order to not loose time in
-	// serialization for mpi, and have better locality
-
 	if (mpi_rank <= 0) {
-		if (__globalParameters__.prs) {
-			/* PRS */
-			this->preprocessors.push_back(std::make_shared<preprocess>(0));
-			this->preprocessors.at(0)->loadFormula(__globalParameters__.filename.c_str());
-			for (auto& preproc : preprocessors) {
-				SatResult res = preproc->solve({});
-				LOGDEBUG1("PRS returned %d", res);
-				if (20 == static_cast<int>(res)) {
-					LOG0("PRS answered UNSAT");
-					finalResult = SatResult::UNSAT;
-					this->join(this, finalResult, {});
-				} else if (10 == static_cast<int>(res)) {
-					LOG0("PRS answered SAT");
-					finalModel = preproc->getModel();
-					finalResult = SatResult::SAT;
-					this->join(this, finalResult, finalModel);
-				}
-			}
-
-			receivedFinalResultBcast = static_cast<int>(finalResult.load());
-
-			// Not solved during preprocessing
-			if (receivedFinalResultBcast == 0) {
-				// Free some memory
-				for (auto& preproc : preprocessors)
-					preproc->releaseMemory();
-
-				auto lastSimplification = preprocessors.back();
-				varCount = lastSimplification->getVariablesCount();
-
-				initClauses = std::move(lastSimplification->getSimplifiedFormula());
-			}
-		} else if (!Parsers::parseCNF(__globalParameters__.filename.c_str(), initClauses, &varCount)) {
+		if (!Parsers::parseCNF(__globalParameters__.filename.c_str(), initClauses, &varCount)) {
 			PABORT(PERR_PARSING, "Error at parsing!");
 		}
+		receivedFinalResultBcast = static_cast<int>(finalResult.load());
 	}
 
 	// Send instance via MPI from leader 0 to workers.
@@ -109,42 +66,43 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 
 		if (receivedFinalResultBcast != 0) {
 			mpi_winner = 0;
-			finalResult = static_cast<SatResult>(receivedFinalResultBcast);
+			finalResult = static_cast<BackboneResult>(receivedFinalResultBcast);
 			globalEnding = true;
-			LOGDEBUG1("[PRS] It is the mpi end: %d", receivedFinalResultBcast);
+			LOGDEBUG1("It is the mpi end: %d", receivedFinalResultBcast);
 			mutexGlobalEnd.lock();
 			condGlobalEnd.notify_all();
 			mutexGlobalEnd.unlock();
 			return;
-		} else // send formula if not solved by preprocessing
+		} else // send formula if not solved while parsing
 			mpiutils::sendFormula(initClauses, &varCount, 0);
 	}
 
-	// Init Database Factory For Solvers (Is it better to put this in the SolverFactory as for SharingFactory ?)
+	unsigned int clausesCount = initClauses.size();
+
+	// Init Database Factory For Solvers (Is it better to put this in the BackboneSolverFactory as for SharingFactory ?)
 	ClauseDatabaseFactory::initialize(__globalParameters__.maxClauseSize, __globalParameters__.importDBCap, 2, 1);
 
-	SolverFactory::createSolvers(__globalParameters__.cpus,
-								 __globalParameters__.importDB.c_str()[0],
-								 __globalParameters__.solver,
-								 cdclSolvers,
-								 localSolvers);
+	BackboneSolverFactory::createSolvers(
+		__globalParameters__.cpus, __globalParameters__.importDB.c_str()[0], __globalParameters__.solver, solvers);
 
 	IDScaler globalIDScaler;
 	IDScaler typeIDScaler;
 	if (dist) {
 		globalIDScaler = [rank = mpi_rank,
-						  size = __globalParameters__.cpus](const std::shared_ptr<SolverInterface>& solver) {
+						  size = __globalParameters__.cpus](const std::shared_ptr<BackboneSolverInterface>& solver) {
 			return rank * size + solver->getSolverId();
 		};
 		typeIDScaler = [rank = mpi_rank,
-						size = __globalParameters__.cpus](const std::shared_ptr<SolverInterface>& solver) {
+						size = __globalParameters__.cpus](const std::shared_ptr<BackboneSolverInterface>& solver) {
 			return rank * solver->getSolverTypeCount() + solver->getSolverTypeId();
 		};
 	} else {
-		globalIDScaler = [](const std::shared_ptr<SolverInterface>& solver) { return solver->getSolverId(); };
-		typeIDScaler = [](const std::shared_ptr<SolverInterface>& solver) { return solver->getSolverTypeId(); };
+		globalIDScaler = [](const std::shared_ptr<BackboneSolverInterface>& solver) { return solver->getSolverId(); };
+		typeIDScaler = [](const std::shared_ptr<BackboneSolverInterface>& solver) {
+			return solver->getSolverTypeId();
+		};
 	}
-	SolverFactory::diversification(cdclSolvers, localSolvers, globalIDScaler, typeIDScaler);
+	BackboneSolverFactory::diversification(solvers, globalIDScaler, typeIDScaler);
 
 	LOG0("Diversified all solvers");
 
@@ -153,14 +111,14 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 	if (__globalParameters__.enableMallob && dist) {
 		// only global strategy
 		SharingStrategyFactory::instantiateGlobalStrategies(2, globalStrategies);
-		for (auto& cdcl : cdclSolvers) {
-			globalStrategies.back()->addProducer(cdcl);
-			globalStrategies.back()->addClient(cdcl);
-			globalStrategies.back()->connectProducer(cdcl);
+		for (auto& solver : solvers) {
+			globalStrategies.back()->addProducer(solver);
+			globalStrategies.back()->addClient(solver);
+			globalStrategies.back()->connectProducer(solver);
 		}
 	} else {
 		SharingStrategyFactory::instantiateLocalStrategies(
-			__globalParameters__.sharingStrategy, this->localStrategies, cdclSolvers);
+			__globalParameters__.sharingStrategy, this->localStrategies, solvers);
 
 		if (dist) {
 			SharingStrategyFactory::instantiateGlobalStrategies(__globalParameters__.globalSharingStrategy,
@@ -193,23 +151,51 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 		return;
 	}
 
-	/* Solving */
-	// Load formula in solvers in parallel using solverInitializers
+	/* Phase initialization with GaspiInitializer (optional) */
+	/* ----------------------------------------------------- */
+	/* Computed before the solvers are launched: phases can only be set while a solver is not solving */
+	std::unique_ptr<saga::GeneticAlgorithm> gaInitializer;
+	if (__globalParameters__.gaInitPeriod) {
+		if (__globalParameters__.gaPopSize < solvers.size())
+			__globalParameters__.gaPopSize = solvers.size();
 
-	for (auto& cdcl : cdclSolvers) {
-		SequentialWorker* myworker = new SequentialWorker(cdcl);
-		this->addSlave(myworker);
-		solverInitializers.emplace_back([myworker, &cube, &cdcl, &initClauses, varCount, clausesCount] {
-			cdcl->addInitialClauses(initClauses, varCount);
-			myworker->solve(cube);
-		});
+		LOG0("GA Initialized");
+		gaInitializer = std::make_unique<saga::GeneticAlgorithm>(__globalParameters__.gaPopSize,
+																 varCount,
+																 __globalParameters__.gaMaxGen,
+																 __globalParameters__.gaMutRate,
+																 __globalParameters__.gaCrossRate,
+																 __globalParameters__.gaSeed,
+																 clausesCount,
+																 varCount,
+																 initClauses);
+		gaInitializer->solve();
+		LOG0("GA Finished");
 	}
 
-	for (auto& local : localSolvers) {
-		SequentialWorker* myworker = new SequentialWorker(local);
+	/* Solving */
+	// Load formula in solvers in parallel using solverInitializers
+	for (auto& solver : solvers) {
+		SequentialWorker* myworker = new SequentialWorker(solver);
 		this->addSlave(myworker);
-		solverInitializers.emplace_back([myworker, &cube, &local, &initClauses, varCount, clausesCount] {
-			local->addInitialClauses(initClauses, varCount);
+		solverInitializers.emplace_back([myworker, &cube, solver, &initClauses, varCount, &gaInitializer] {
+			solver->addInitialClauses(initClauses, varCount);
+
+			// One solver in gaInitPeriod gets its phases from the GaspiInitializer.
+			// !! Warning !! The getters return references: each solver reads a different solution.
+			if (gaInitializer && !(solver->getSolverId() % __globalParameters__.gaInitPeriod)) {
+				// 0 is the best solution, the first solver gets it
+				unsigned solIdx = solver->getSolverId() / __globalParameters__.gaInitPeriod;
+				LOGDEBUG1("Solver %u receiving solution %u", solver->getSolverId(), solIdx);
+				saga::Solution& initPhases = gaInitializer->getNthSolution(solIdx);
+
+				// Todo fix the +1 on solution size, it is confusing
+				for (unsigned int i = 1; i < varCount; i++) {
+					solver->setPhase(i, initPhases[i]);
+				}
+				LOGDEBUG1("Phases set for solver %u", solver->getSolverId());
+			}
+
 			myworker->solve(cube);
 		});
 	}
@@ -222,72 +208,13 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 
 	SharingStrategyFactory::launchSharers(sharingStrategiesConcat, this->sharers);
 
-	// In case GASPI is enabled
-	if (__globalParameters__.gaInitPeriod) {
-
-		if (__globalParameters__.gaPopSize < cdclSolvers.size())
-			__globalParameters__.gaPopSize = cdclSolvers.size();
-
-		LOG0("GA Initialized");
-		saga::GeneticAlgorithm gaInitializer(__globalParameters__.gaPopSize,
-											 varCount,
-											 __globalParameters__.gaMaxGen,
-											 __globalParameters__.gaMutRate,
-											 __globalParameters__.gaCrossRate,
-											 __globalParameters__.gaSeed,
-											 clausesCount,
-											 varCount,
-											 initClauses);
-
-		gaInitializer.solve();
-
-		LOG0("GA Finished");
-		// !! Warning !! The getters return references, thus two threads shouldn't access the same solution,
-		// otherwise datarace !
-		for (auto& cdcl : cdclSolvers) {
-			// One in gaInitPeriod cdcl solver will have his phase set by GaspiInitializer  use modulo for better
-			// distribution accross the different families of kissat
-			if (!(cdcl->getSolverId() % __globalParameters__.gaInitPeriod)) {
-				// 0 is the best solution, the first solver gets it
-				uint solIdx = cdcl->getSolverId() / __globalParameters__.gaInitPeriod;
-				LOGDEBUG1("Solver %u receiving solution %u", cdcl->getSolverId(), solIdx);
-				saga::Solution& initPhases = gaInitializer.getNthSolution(solIdx);
-
-				// Todo fix the +1 on solution size, it is confusing
-				for (int i = 1; i < varCount; i++) {
-					cdcl->setPhase(i, initPhases[i]);
-				}
-
-				LOGDEBUG1("Phases set for solver %u", cdcl->getSolverId());
-			}
-		}
-
-		for (auto& local : localSolvers) {
-			// One in gaInitPeriod cdcl solver will have his phase set by GaspiInitializer  use modulo for better
-			// distribution accross the different families of kissat
-			if (!(local->getSolverId() % __globalParameters__.gaInitPeriod)) {
-				// 0 is the best solution, the first solver gets it
-				uint solIdx = local->getSolverId() / __globalParameters__.gaInitPeriod;
-				LOGDEBUG1("Solver %u receiving solution %u", local->getSolverId(), solIdx);
-				saga::Solution& initPhases = gaInitializer.getNthSolution(solIdx);
-
-				// Todo fix the +1 on solution size, it is confusing
-				for (int i = 1; i < varCount; i++) {
-					local->setPhase(i, initPhases[i]);
-				}
-
-				LOGDEBUG1("Phases set for solver %u", local->getSolverId());
-			}
-		}
-	}
-
 	initClauses.clear();
 }
 
 void
-PortfolioSimple::join(WorkingStrategy* strat, SatResult res, const std::vector<int>& model)
+PortfolioSimple::join(WorkingStrategy* strat, BackboneResult res, const std::vector<int>& backbone)
 {
-	if (res == SatResult::UNKNOWN || strategyEnding)
+	if (res == BackboneResult::UNKNOWN || strategyEnding)
 		return;
 
 	strategyEnding = true;
@@ -298,8 +225,8 @@ PortfolioSimple::join(WorkingStrategy* strat, SatResult res, const std::vector<i
 		finalResult = res;
 		globalEnding = true;
 
-		if (res == SatResult::SAT) {
-			finalModel = model;
+		if (res == BackboneResult::COMPLETE) {
+			finalBackbone = backbone;
 		}
 
 		if (strat != this) {
@@ -312,7 +239,7 @@ PortfolioSimple::join(WorkingStrategy* strat, SatResult res, const std::vector<i
 		mutexGlobalEnd.unlock();
 		LOGDEBUG1("Broadcasted the end");
 	} else { // Else forward the information to the parent strategy
-		parent->join(this, res, model);
+		parent->join(this, res, backbone);
 	}
 }
 

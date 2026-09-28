@@ -16,9 +16,9 @@ AllGatherSharing::AllGatherSharing(const std::shared_ptr<ClauseDatabase>& clause
 AllGatherSharing::~AllGatherSharing() {}
 
 void
-AllGatherSharing::joinProcess(int winnerRank, SatResult res, const std::vector<int>& model)
+AllGatherSharing::joinProcess(int winnerRank, BackboneResult res, const std::vector<int>& backbone)
 {
-	this->GlobalSharingStrategy::joinProcess(winnerRank, res, model);
+	this->GlobalSharingStrategy::joinProcess(winnerRank, res, backbone);
 }
 
 bool

@@ -123,7 +123,7 @@ Parameters::init(int argc, char** argv)
 void
 Parameters::printHelp()
 {
-	std::cout << BOLD << "USAGE: solver [options] input.cnf" << RESET << std::endl;
+	std::cout << BOLD << "USAGE: backpainless [options] input.cnf" << RESET << std::endl;
 	std::cout << "Options:" << std::endl << std::endl;
 	std::string currentCategory = "";
 
@@ -185,10 +185,8 @@ Parameters::printDetailedHelp(std::string& category)
 
 	if (category == "Portfolio") {
 		std::cout << DETAILED_HELP_PORTFOLIO << std::endl;
-	} else if (category == "Solving") {
-		std::cout << DETAILED_HELP_SOLVING << std::endl;
-	} else if (category == "Preprocessing") {
-		std::cout << DETAILED_HELP_PREPROCESSING << std::endl;
+	} else if (category == "Backbone") {
+		std::cout << DETAILED_HELP_BACKBONE << std::endl;
 	} else if (category == "Sharing") {
 		std::cout << DETAILED_HELP_SHARING << std::endl;
 	} else if (category == "Global") {
@@ -196,8 +194,7 @@ Parameters::printDetailedHelp(std::string& category)
 	} else if (category == "*") {
 		std::cout << DETAILED_HELP_PORTFOLIO << std::endl;
 		std::cout << DETAILED_HELP_GLOBAL << std::endl;
-		std::cout << DETAILED_HELP_SOLVING << std::endl;
-		std::cout << DETAILED_HELP_PREPROCESSING << std::endl;
+		std::cout << DETAILED_HELP_BACKBONE << std::endl;
 		std::cout << DETAILED_HELP_SHARING << std::endl;
 	} else {
 		std::cout << RED << "Unknown category: " << category << RESET << std::endl;

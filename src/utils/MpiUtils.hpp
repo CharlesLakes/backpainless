@@ -9,7 +9,7 @@
 #define MYMPI_BITSET 1
 #define MYMPI_OK 2
 #define MYMPI_NOTOK 3
-#define MYMPI_MODEL 4
+#define MYMPI_BACKBONE 4
 
 #define COLOR_YES 10
 
@@ -66,8 +66,8 @@ serializeClauses(const std::vector<simpleClause>& clauses, std::vector<int>& ser
 bool
 deserializeClauses(const std::vector<int>& serializedClauses, std::vector<simpleClause>& clauses);
 
-/// @brief The winner determined by the root will send the model if the answer was SATISFIABLE
+/// @brief The winner determined by the root sends the backbone to the root if it was computed
 void
-sendModelToRoot();
+sendBackboneToRoot();
 
 }

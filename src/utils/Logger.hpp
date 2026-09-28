@@ -74,7 +74,7 @@ void
 logClause(int verbosityLevel, const char* color, const int* lits, unsigned int size, const char* fmt...);
 
 /**
- * @brief Log the solution status of the SAT solver.
+ * @brief Log the status of the formula ('s' line).
  * @param string The solution status string to log.
  */
 void
@@ -93,11 +93,11 @@ void
 unlockLogger();
 
 /**
- * @brief Log the model (satisfying assignment) found by the SAT solver.
- * @param model A vector of integers representing the satisfying assignment.
+ * @brief Log the backbone, one 'b <lit>' line per literal terminated by 'b 0' (CadiBack format).
+ * @param backbone The backbone literals.
  */
 void
-logModel(const std::vector<int>& model);
+logBackbone(const std::vector<int>& backbone);
 
 /**
  * @brief Global flag to enable/disable logging.

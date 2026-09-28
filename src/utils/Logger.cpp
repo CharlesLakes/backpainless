@@ -136,35 +136,16 @@ logSolution(const char* string)
 	printf("s %s\n", string);
 }
 
-static unsigned int
-intWidth(int i)
-{
-	if (i == 0)
-		return 1;
-
-	return (i < 0) + 1 + (unsigned int)log10(fabs(i));
-}
-
 void
-logModel(const std::vector<int>& model)
+logBackbone(const std::vector<int>& backbone)
 {
+	/* CadiBack format: one 'b <lit>' line per backbone literal, terminated by 'b 0' */
 	std::lock_guard<std::recursive_mutex> lockLog(logMutex);
-	unsigned int usedWidth = 0;
 
-	for (unsigned int i = 0; i < model.size(); i++) {
-		if (usedWidth + 1 + intWidth(model[i]) > 80) {
-			printf("\n");
-			usedWidth = 0;
-		}
-
-		if (usedWidth == 0) {
-			usedWidth += printf("v");
-		}
-
-		usedWidth += printf(" %d", model[i]);
+	for (int lit : backbone) {
+		printf("b %d\n", lit);
 	}
 
-	printf(" 0");
-
-	printf("\n");
+	printf("b 0\n");
+	fflush(stdout);
 }

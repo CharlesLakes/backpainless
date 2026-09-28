@@ -20,9 +20,9 @@ GenericGlobalSharing::GenericGlobalSharing(const std::shared_ptr<ClauseDatabase>
 GenericGlobalSharing::~GenericGlobalSharing() {}
 
 void
-GenericGlobalSharing::joinProcess(int winnerRank, SatResult res, const std::vector<int>& model)
+GenericGlobalSharing::joinProcess(int winnerRank, BackboneResult res, const std::vector<int>& backbone)
 {
-	this->GlobalSharingStrategy::joinProcess(winnerRank, res, model);
+	this->GlobalSharingStrategy::joinProcess(winnerRank, res, backbone);
 }
 
 bool

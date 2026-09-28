@@ -13,13 +13,13 @@ reset_theme="\e[0m"
 log_theme="\033[1;34m"
 
 cleanup() {
-    # Check and kill only painless_release or painless_debug processes
-    if pgrep -f "painless_(release|debug)" > /dev/null; then
-        echo -e "${log_theme}Terminating painless processes...${reset_theme}"
-        pkill -9 -f "painless_(release|debug)"
+    # Check and kill only backpainless_release or backpainless_debug processes
+    if pgrep -f "backpainless_(release|debug)" > /dev/null; then
+        echo -e "${log_theme}Terminating backpainless processes...${reset_theme}"
+        pkill -9 -f "backpainless_(release|debug)"
         echo -e "${success_theme}Cleanup completed.${reset_theme}"
     else
-        echo -e "${log_theme}No painless processes found. No cleanup needed.${reset_theme}"
+        echo -e "${log_theme}No backpainless processes found. No cleanup needed.${reset_theme}"
     fi
 }
 
@@ -138,10 +138,10 @@ fi
 debugmpi=""
 
 if [ $# -gt 3 ] && [ "$4" = "debug" ]; then
-    cmd="$script_dir/../build/debug/painless_debug"
+    cmd="$script_dir/../build/debug/backpainless_debug"
     debugmpi="--verbose --debug-daemons"
 else
-    cmd="$script_dir/../build/release/painless_release"
+    cmd="$script_dir/../build/release/backpainless_release"
 fi
 
 args="-v=$verbose -c=$nb_solvers -solver=$solver -t=$timeout -shr-strat=$lstrat -shr-sleep=$shr_sleep $flags"
@@ -238,16 +238,8 @@ for f in $(cat ${input_files}); do
     "SATISFIABLE")
         mypar2=$time_spent_bash
         ((nbSAT++))
-        output=$("$script_dir/SAT" "$f" "$output_file")
-        last_line=$(echo "$output" | tail -n 1)
-        if [[ "$last_line" == "11" ]]; then
-            echo -e "${success_theme} SAT solution is correct. ${reset_theme}"
-        elif [[ "$last_line" == "-1" ]]; then
-            echo -e "${error_theme} SAT solution is wrong. ${reset_theme}"
-            results[0]="WRONG_SATISFIABLE"
-        else
-            echo -e "${error_theme} SAT returned an unexpected value. ${reset_theme}"
-        fi
+        # backpainless prints a backbone ('b' lines), not a model: the SAT model checker ($script_dir/SAT) does not
+        # apply. Small instances can be checked with scripts/check_backbone.py
         ;;
     "UNSATISFIABLE")
         mypar2=$time_spent_bash

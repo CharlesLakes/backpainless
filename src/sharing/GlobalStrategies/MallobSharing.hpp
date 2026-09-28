@@ -66,9 +66,9 @@ class MallobSharing : public GlobalSharingStrategy
 	 * @brief Handles the process of joining when a solution is found.
 	 * @param winnerRank The rank of the process that found the solution.
 	 * @param res The result of the SAT solving process.
-	 * @param model The satisfying assignment, if any.
+	 * @param backbone The backbone literals, if the backbone was computed.
 	 */
-	void joinProcess(int winnerRank, SatResult res, const std::vector<int>& model) override;
+	void joinProcess(int winnerRank, BackboneResult res, const std::vector<int>& backbone) override;
 
 	/**
 	 * @brief Imports a clause into the clause database.

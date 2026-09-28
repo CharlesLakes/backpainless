@@ -3,9 +3,7 @@
 #include "utils/Parameters.hpp"
 #include "working/WorkingStrategy.hpp"
 
-#include "solvers/CDCL/SolverCdclInterface.hpp"
-#include "preprocessors/PreprocessorInterface.hpp"
-#include "solvers/LocalSearch/LocalSearchInterface.hpp"
+#include "solvers/BackboneSolverInterface.hpp"
 
 #include "sharing/Sharer.hpp"
 
@@ -17,7 +15,7 @@
 
 /**
  * @brief A Simple Implementation of WorkingStrategy for the portfolio parallel strategy
- * This strategy uses the different factories SolverFactory and SharingStrategyFactory in order to instantiate the
+ * This strategy uses the different factories BackboneSolverFactory and SharingStrategyFactory in order to instantiate the
  * different needed components specified by the parameters.
  * @ingroup working
  */
@@ -30,7 +28,7 @@ class PortfolioSimple : public WorkingStrategy
 
 	void solve(const std::vector<int>& cube) override;
 
-	void join(WorkingStrategy* strat, SatResult res, const std::vector<int>& model) override;
+	void join(WorkingStrategy* strat, BackboneResult res, const std::vector<int>& backbone) override;
 
 	void setSolverInterrupt() override;
 
@@ -43,9 +41,7 @@ class PortfolioSimple : public WorkingStrategy
 
 	// Solvers
 	//--------
-	std::vector<std::shared_ptr<SolverCdclInterface>> cdclSolvers;
-	std::vector<std::shared_ptr<LocalSearchInterface>> localSolvers;
-	std::vector<std::shared_ptr<PreprocessorInterface>> preprocessors; /* kept for model restoration*/
+	std::vector<std::shared_ptr<BackboneSolverInterface>> solvers;
 
 	// Sharing
 	//--------

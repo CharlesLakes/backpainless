@@ -1,6 +1,6 @@
 # Define the main output files
 # ===========================
-PAINLESS_OUTPUT := painless
+PAINLESS_OUTPUT := backpainless
 DEBUG_OUTPUT := $(PAINLESS_OUTPUT)_debug
 RELEASE_OUTPUT := $(PAINLESS_OUTPUT)_release
 
@@ -59,46 +59,24 @@ M4RI_DIR := $(LIBS_DIR)/m4ri-20200125
 
 # Define dependencies
 # ===================
-DEPENDENCIES := $(MINISAT_BUILD)/libminisat.a \
-                $(GLUCOSE_BUILD)/libglucose.a \
-                $(LINGELING_BUILD)/liblgl.a \
-                $(KISSAT_BUILD)/libkissat.a \
-                $(KISSATMAB_BUILD)/libkissat_mab.a \
-				$(KISSATINC_BUILD)/libkissat_inc.a \
-                $(YALSAT_BUILD)/libyals.a \
-				$(TASSAT_BUILD)/libtas.a \
-                $(CADICAL_BUILD)/libcadical.a \
-                $(MAPLE_BUILD)/libmapleCOMSPS.a \
-                $(M4RI_DIR)/.libs/libm4ri.a
+# Only CaDiCaL is linked: it is the SAT engine of the CadiBack backbone solver (src/solvers/CDCL/CadiBack).
+# The other vendored solvers in solvers/ can still be built with their own targets (make kissat, make solvers, ...).
+DEPENDENCIES := $(CADICAL_BUILD)/libcadical.a
 
 # Library flags
 # =============
-LIBS := -l:liblgl.a -L$(LINGELING_BUILD) \
-		-l:libyals.a -L$(YALSAT_BUILD) \
-		-l:libtas.a -L$(TASSAT_BUILD) \
-		-l:libkissat.a -L$(KISSAT_BUILD) \
-		-l:libminisat.a -L$(MINISAT_BUILD) \
-		-l:libglucose.a -L$(GLUCOSE_BUILD) \
-		-l:libcadical.a -L$(CADICAL_BUILD) \
-		-l:libmapleCOMSPS.a -L$(MAPLE_BUILD) \
-		-l:libkissat_mab.a -L$(KISSATMAB_BUILD) \
-		-l:libkissat_inc.a -L$(KISSATINC_BUILD) \
-		-l:libm4ri.a -L./libs/m4ri-20200125/.libs \
+LIBS := -l:libcadical.a -L$(CADICAL_BUILD) \
 		-lpthread -lz -lm $(shell mpic++ --showme:link)
-# -l:libgkissat.a -L$(KISSATGASPI_BUILD) \
 
 # Include directories
 # ===================
 INCLUDES := -I$(SRC_DIR) \
-            -I$(SOLVERS_DIR) \
-            -I$(SOLVERS_DIR)/glucose \
-            -I$(SOLVERS_DIR)/minisat \
-            -I$(LIBS_DIR)/eigen-3.4.0 \
-            -I$(M4RI_DIR)
+            -I$(SOLVERS_DIR)
 
 # Source files
 # ============
-SRCS := $(shell find $(SRC_DIR) -name "*.cpp" -not -path "*/.ignore/*")
+# src/disabled/ holds code kept for later reintegration (PRS, SBVA, PortfolioPRS), it is not compiled
+SRCS := $(shell find $(SRC_DIR) -name "*.cpp" -not -path "*/.ignore/*" -not -path "*/disabled/*")
 DEBUG_OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(DEBUG_BUILD_DIR)/%.o)
 RELEASE_OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(RELEASE_BUILD_DIR)/%.o)
 
@@ -106,7 +84,7 @@ RELEASE_OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(RELEASE_BUILD_DIR)/%.o)
 # ==============
 .PHONY: all
 all:
-	$(MAKE) m4ri && $(MAKE) solvers && $(MAKE) painless
+	$(MAKE) cadical && $(MAKE) painless
 
 .DEFAULT_GOAL := all
 
@@ -123,10 +101,10 @@ $(shell mkdir -p $(DEBUG_BUILD_DIR) $(RELEASE_BUILD_DIR))
 # Main targets
 # ============
 debug: $(DEBUG_BUILD_DIR)/$(DEBUG_OUTPUT)
-	ln -sf $(DEBUG_BUILD_DIR)/$(DEBUG_OUTPUT) painlessd
+	ln -sf $(DEBUG_BUILD_DIR)/$(DEBUG_OUTPUT) backpainlessd
 
 release: $(RELEASE_BUILD_DIR)/$(RELEASE_OUTPUT)
-	ln -sf $(RELEASE_BUILD_DIR)/$(RELEASE_OUTPUT) painless
+	ln -sf $(RELEASE_BUILD_DIR)/$(RELEASE_OUTPUT) backpainless
 
 $(DEBUG_BUILD_DIR)/$(DEBUG_OUTPUT): $(DEBUG_OBJS) $(DEPENDENCIES)
 	$(CXX) -o $@ $(DEBUG_OBJS) $(DEBUG_FLAGS) $(INCLUDES) $(LIBS)
@@ -217,7 +195,7 @@ $(M4RI_DIR)/.libs/libm4ri.a:
 .PHONY: clean cleanpainless cleansolvers clean cleanall
 cleanpainless:
 	rm -rf $(BUILD_DIR)
-	rm -rf painless painlessd
+	rm -rf backpainless backpainlessd
 
 cleansolvers:
 	$(MAKE) clean -C $(SOLVERS_DIR)/kissat

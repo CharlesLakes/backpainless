@@ -1,0 +1,55 @@
+c Backbone demo: 20 variables, 29 clauses, backbone of 11 literals.
+c Small enough for scripts/check_backbone.py (brute force), but the backbone is
+c not visible as unit clauses: every backbone literal needs propagation or
+c case reasoning, and several non-backbone variables are correlated so that
+c flipping a single literal does not discard them.
+c
+c A (x1..x5)  x1 is forced without a unit clause: (x1 v x2)(x1 v -x2).
+c             Then the chain x1 -> x2 -> x3 -> -x4 -> x5.
+c             Backbone: 1 2 3 -4 5
+c B (x6..x9)  Exactly one of x6..x9. x6 needs x4 (false), x7 needs -x5 (false),
+c             x8 needs -x2 or -x3 (both false), so only x9 is left.
+c             Backbone: -6 -7 -8 9
+c C (x10..x13) XOR chain x10^x11 = x11^x12 = x12^x13 = 1. There are exactly two
+c             assignments (1010 / 0101): no backbone, and no literal is flippable.
+c D (x14..x17) The 4 clauses over x14,x15,x16 force x14 by case analysis only.
+c             x17 is forced for both values of x10 (from C).
+c             Backbone: 14 17   (15 and 16 are free)
+c E (x18..x20) At least one of them is true: no backbone.
+c
+c Expected backbone: 1 2 3 -4 5 -6 -7 -8 9 14 17
+p cnf 20 29
+c --- A
+1 2 0
+1 -2 0
+-1 2 0
+-2 3 0
+-3 -4 0
+4 5 0
+c --- B
+6 7 8 9 0
+-6 -7 0
+-6 -8 0
+-6 -9 0
+-7 -8 0
+-7 -9 0
+-8 -9 0
+-6 4 0
+-7 -5 0
+-8 -2 -3 0
+c --- C
+10 11 0
+-10 -11 0
+11 12 0
+-11 -12 0
+12 13 0
+-12 -13 0
+c --- D
+14 15 16 0
+14 15 -16 0
+14 -15 16 0
+14 -15 -16 0
+-14 17 10 0
+-14 17 -10 0
+c --- E
+18 19 20 0

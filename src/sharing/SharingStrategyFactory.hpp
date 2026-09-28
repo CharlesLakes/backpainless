@@ -9,8 +9,7 @@
 #include "./sharing/GlobalStrategies/GlobalSharingStrategy.hpp"
 #include "./sharing/SharingStrategy.hpp"
 
-#include "solvers/CDCL/SolverCdclInterface.hpp"
-#include "solvers/LocalSearch/LocalSearchInterface.hpp"
+#include "solvers/BackboneSolverInterface.hpp"
 
 #include <vector>
 
@@ -47,11 +46,11 @@ struct SharingStrategyFactory
      *        2: HordeSatSharing (2 groups)
      *        3: SimpleSharing (1 group)
      * @param localStrategies Vector to store the created local strategies.
-     * @param cdclSolvers Vector of CDCL solvers to be used in the strategies.
+     * @param solvers Vector of backbone solvers to be used in the strategies.
      */
     static void instantiateLocalStrategies(int strategyNumber,
                                            std::vector<std::shared_ptr<SharingStrategy>>& localStrategies,
-                                           std::vector<std::shared_ptr<SolverCdclInterface>>& cdclSolvers);
+                                           std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers);
 
     /**
      * @brief Instantiate global sharing strategies.
@@ -79,5 +78,5 @@ struct SharingStrategyFactory
      * @param newSolvers Vector of new CDCL solvers to be added.
      */
     static void addEntitiesToLocal(std::vector<std::shared_ptr<SharingStrategy>>& localStrategies,
-                                   std::vector<std::shared_ptr<SolverCdclInterface>>& newSolvers);
+                                   std::vector<std::shared_ptr<BackboneSolverInterface>>& newSolvers);
 };

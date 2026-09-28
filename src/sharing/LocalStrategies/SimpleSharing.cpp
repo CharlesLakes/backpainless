@@ -1,7 +1,6 @@
 #include "SimpleSharing.hpp"
 
 #include "painless.hpp"
-#include "solvers/SolverFactory.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Parameters.hpp"
 
