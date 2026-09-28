@@ -31,6 +31,11 @@
 		  0,                                                                                                                 \
 		  "Chunk rate K of the constraint (0 = all candidates, 1 = one-by-one, 10 = cadiback --chunking)")                   \
 	PARAM(backboneNoFlip, bool, "bb-no-flip", false, "Do not drop flippable literals from the backbone candidates")       \
+	PARAM(backboneShareUnits,                                                                                             \
+		  std::string,                                                                                                       \
+		  "bb-share-units",                                                                                                  \
+		  "1",                                                                                                               \
+		  "Mask of 0/1 cycled over the solver ids: workers with 1 export their backbone literals as units (10 = even ids)")  \
                                                                                                                        \
 	CATEGORY("Portfolio")                                                                                                 \
 	PARAM(solver, std::string, "solver", "c", "Portfolio of backbone solvers")                                            \

@@ -17,10 +17,18 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 									   const IDScaler& gIDScaler,
 									   const IDScaler& typeIDScaler)
 {
+	/* Validated by Parameters::init */
+	const std::string& shareMask = __globalParameters__.backboneShareUnits;
+
 	for (auto solver : solvers) {
 		solver->setSolverId(gIDScaler(solver));
 		solver->setSolverTypeId(typeIDScaler(solver));
-		LOGDEBUG1("Computing Id %d,%d", solver->getSolverId(), solver->getSolverTypeId());
+		/* Indexed by the global id, so that the mask also applies across MPI ranks */
+		solver->setShareBackboneUnits(shareMask[solver->getSolverId() % shareMask.size()] == '1');
+		LOGDEBUG1("Computing Id %d,%d, share backbone units: %d",
+				  solver->getSolverId(),
+				  solver->getSolverTypeId(),
+				  solver->getShareBackboneUnits());
 	}
 
 	for (auto solver : solvers) {
