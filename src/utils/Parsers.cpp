@@ -251,6 +251,9 @@ parseCNF(const char* filename,
 			}
 			if (keepClause)
 				clauses.push_back(std::move(cls));
+		} else {
+			/* The empty clause makes the formula UNSAT: keep it, the solvers will answer UNSAT */
+			clauses.push_back(std::move(cls));
 		}
 
 		cls.clear();
