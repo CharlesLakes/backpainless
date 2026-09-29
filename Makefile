@@ -106,6 +106,10 @@ debug: $(DEBUG_BUILD_DIR)/$(DEBUG_OUTPUT)
 release: $(RELEASE_BUILD_DIR)/$(RELEASE_OUTPUT)
 	ln -sf $(RELEASE_BUILD_DIR)/$(RELEASE_OUTPUT) backpainless
 
+.PHONY: test
+test: release
+	python3 tests/run_tests.py
+
 $(DEBUG_BUILD_DIR)/$(DEBUG_OUTPUT): $(DEBUG_OBJS) $(DEPENDENCIES)
 	$(CXX) -o $@ $(DEBUG_OBJS) $(DEBUG_FLAGS) $(INCLUDES) $(LIBS)
 
