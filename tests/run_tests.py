@@ -7,7 +7,8 @@ Suites:
     sharing     medium planted 3-SAT instances solved by a parallel portfolio with frequent sharing rounds. Checks
                 that clauses are really exchanged (Sharer stats) and that the backbone matches an independent oracle
                 (the standalone CaDiCaL binary, one SAT call per candidate literal)
-    robustness  output format, -no-backbone, timeout, repeated runs with many threads (interrupt races)
+    robustness  output format, -no-backbone, timeout, repeated runs with many threads (interrupt races),
+                -bb-share-units validation and, with the debug binary, which workers export backbone units
     mpi         distributed runs with mpirun (not part of 'all', needs -dist support on the machine)
 
 Usage:
@@ -244,6 +245,8 @@ BRUTEFORCE_CONFIGS = [
     ["-c=4", "-shr-strat=2"],
     ["-c=8", "-shr-strat=3", "-bb-chunk=10"],
     ["-c=8", "-shr-sleep=1000", "-init-sleep=100"],
+    ["-c=4", "-bb-share-units=0"],
+    ["-c=8", "-bb-share-units=10", "-bb-chunk=1", "-shr-sleep=1000", "-init-sleep=100"],
 ]
 
 
@@ -282,6 +285,9 @@ SHARING_CONFIGS = [
     ["-c=8", "-shr-strat=1", "-bb-chunk=1"],
     ["-c=8", "-shr-strat=1", "-bb-chunk=10", "-bb-no-flip"],
     ["-c=14", "-shr-strat=3"],
+    ["-c=8", "-shr-strat=1", "-bb-share-units=0"],
+    ["-c=8", "-shr-strat=2", "-bb-share-units=10", "-bb-chunk=1"],
+    ["-c=8", "-shr-strat=3", "-bb-share-units=011", "-bb-chunk=10"],
 ]
 SHARING_FAST = ["-shr-sleep=10000", "-init-sleep=1000"]
 
@@ -349,6 +355,16 @@ def suite_robustness(opts, report, workdir):
         error = "'b' lines printed with -no-backbone"
     report.record("-no-backbone", error, run)
 
+    # -bb-share-units: an invalid mask is rejected before solving
+    for mask in ("", "2", "1a"):
+        run = run_backpainless(opts.binary, demo, [f"-bb-share-units={mask}"])
+        error = None
+        if run.returncode != PERR_ARGS_ERROR or run.status is not None:
+            error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
+        report.record(f"-bb-share-units={mask!r} rejected", error, run)
+
+    suite_share_units_mask(opts, report, workdir)
+
     # timeout on a hard instance: s UNKNOWN, exit 0, in about t seconds
     rng = random.Random(1)
     hard = os.path.join(workdir, "hard.cnf")
@@ -365,6 +381,41 @@ def suite_robustness(opts, report, workdir):
     print(f"  {report.passed} passed so far", flush=True)
 
 
+PERR_ARGS_ERROR = 250  # -6 in utils/ErrorCodes.hpp, as a process exit code
+DEBUG_BINARY = os.path.join(ROOT, "backpainlessd")
+EXPORT_LOG = re.compile(r"CadiBack (\d+) exported backbone literal (-?\d+)")
+
+
+def suite_share_units_mask(opts, report, workdir):
+    """With the debug binary (-v=2 logs each exported backbone unit): only the workers selected by the mask export."""
+    if not os.access(DEBUG_BINARY, os.X_OK):
+        print(f"  -bb-share-units mask check SKIPPED: {DEBUG_BINARY} not built (run make debug)")
+        return
+    n, ratio, seed = SHARING_INSTANCES[1]
+    clauses = planted_kcnf(random.Random(seed), n, int(n * ratio), 3)
+    path = os.path.join(workdir, "share_units.cnf")
+    write_cnf(path, n, clauses)
+    nb_solvers = 8
+    for mask in ("1", "0", "10", "01", "001"):
+        run = run_backpainless(DEBUG_BINARY, path, [f"-c={nb_solvers}", "-v=2", f"-bb-share-units={mask}",
+                                                   "-bb-chunk=1", *SHARING_FAST])
+        exporters = {int(solver) for solver, _ in EXPORT_LOG.findall(run.stdout)}
+        allowed = {i for i in range(nb_solvers) if mask[i % len(mask)] == "1"}
+        lits = {int(lit) for _, lit in EXPORT_LOG.findall(run.stdout)}
+        error = None
+        if run.status != "SATISFIABLE":
+            error = f"status {run.status!r}, exit {run.returncode}"
+        elif not exporters <= allowed:
+            error = f"workers {sorted(exporters - allowed)} exported although the mask disables them"
+        elif allowed and not exporters:
+            error = "no worker exported a backbone unit"
+        elif not lits <= set(run.backbone):
+            error = f"exported literals {sorted(lits - set(run.backbone), key=abs)} are not in the backbone"
+        print(f"  -bb-share-units={mask:4s} exporters {sorted(exporters)}  {'OK' if error is None else 'FAIL'}",
+              flush=True)
+        report.record(f"-bb-share-units={mask} honoured", error, run)
+
+
 def suite_mpi(opts, report, workdir):
     mpirun = shutil.which("mpirun")
     if not mpirun or not os.access(CADICAL, os.X_OK):
@@ -376,12 +427,12 @@ def suite_mpi(opts, report, workdir):
     path = os.path.join(workdir, "mpi.cnf")
     write_cnf(path, n, clauses)
     is_sat, backbone = oracle_backbone(n, clauses, workdir)
-    for gstrat in (1, 2, 3):
-        run = run_backpainless(opts.binary, path, ["-c=2", "-dist", f"-gshr-strat={gstrat}", *SHARING_FAST],
+    for extra in (["-gshr-strat=1"], ["-gshr-strat=2"], ["-gshr-strat=3"], ["-gshr-strat=1", "-bb-share-units=10"]):
+        run = run_backpainless(opts.binary, path, ["-c=2", "-dist", *extra, *SHARING_FAST],
                                launcher=(mpirun, "--oversubscribe", "-np", "3"))
         error = check_run(run, is_sat, backbone)
-        print(f"  -gshr-strat={gstrat}: {run.elapsed:.2f}s {'OK' if error is None else 'FAIL'}", flush=True)
-        report.record(f"mpi -np 3 -gshr-strat={gstrat}", error, run)
+        print(f"  {' '.join(extra)}: {run.elapsed:.2f}s {'OK' if error is None else 'FAIL'}", flush=True)
+        report.record(f"mpi -np 3 {' '.join(extra)}", error, run)
 
 
 SUITES = {"bruteforce": suite_bruteforce, "sharing": suite_sharing, "robustness": suite_robustness, "mpi": suite_mpi}

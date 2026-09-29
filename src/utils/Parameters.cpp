@@ -114,6 +114,12 @@ Parameters::init(int argc, char** argv)
 		exit(PERR_ARGS_ERROR);
 	}
 
+	const std::string& shareMask = __globalParameters__.backboneShareUnits;
+	if (shareMask.empty() || shareMask.find_first_not_of("01") != std::string::npos) {
+		LOGERROR("Invalid -bb-share-units=%s: expected a non empty mask of 0 and 1", shareMask.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
 	if(!__globalParameters__.cpus)
 	{
 		__globalParameters__.cpus = std::thread::hardware_concurrency();

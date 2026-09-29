@@ -186,7 +186,7 @@ CadiBack::solve(const std::vector<int>& cube)
 			 * them to the solver (CaDiCaL learns them implicitly); adding the units is sound and makes them fixed */
 			m_unsatAnswers++;
 			for (size_t i = 0; i < chunkSize; i++) {
-				m_backbone.push_back(candidates[i]);
+				addBackboneLiteral(candidates[i]);
 				solver->add(candidates[i]);
 				solver->add(0);
 			}
@@ -218,13 +218,30 @@ CadiBack::extractFixed(std::vector<int>& candidates)
 	for (int lit : candidates) {
 		int value = solver->fixed(lit);
 		if (value > 0) {
-			m_backbone.push_back(lit);
+			addBackboneLiteral(lit);
 			m_fixedFound++;
 		} else if (value == 0) {
 			candidates[kept++] = lit;
 		}
 	}
 	candidates.resize(kept);
+}
+
+void
+CadiBack::addBackboneLiteral(int lit)
+{
+	m_backbone.push_back(lit);
+
+	if (!m_shareBackboneUnits)
+		return;
+
+	/* A backbone literal is implied by the formula alone (the constraint is only used for decisions), so the unit is
+	 * sound for every other solver. The ones added by 'solver->add' are original clauses for CaDiCaL and the ones fixed
+	 * by root propagation are never learnt, hence neither reaches the Learner hook. Duplicates of learnt or imported
+	 * units are harmless: each solver exports a literal at most once, since it leaves the candidates afterwards */
+	std::vector<int> unit{ lit };
+	if (this->exportClause(ClauseExchange::create(unit, 0, this->getSharingId())))
+		LOGDEBUG2("CadiBack %d exported backbone literal %d", this->getSolverId(), lit);
 }
 
 void

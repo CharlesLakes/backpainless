@@ -89,6 +89,10 @@ class CadiBack
 	/// @brief Keeps only the candidates true and (unless disabled) not flippable in the current model.
 	void filterWithModel(std::vector<int>& candidates);
 
+	/// @brief Adds a proven backbone literal to @ref m_backbone and exports it as a unit clause to the sharing clients
+	/// (only if enabled for this worker by -bb-share-units).
+	void addBackboneLiteral(int lit);
+
 	std::unique_ptr<CaDiCaL::Solver> solver;
 
 	/// @brief Used to stop or continue the resolution (read by CaDiCaL through terminate()).

@@ -107,6 +107,11 @@ class BackboneSolverInterface : public SharingEntity
 
 	void setSolverId(unsigned int id) { this->m_solverId = id; }
 
+	/// @brief Tells if the backbone literals found by this solver are exported as unit clauses.
+	bool getShareBackboneUnits() const { return this->m_shareBackboneUnits; }
+
+	void setShareBackboneUnits(bool value) { this->m_shareBackboneUnits = value; }
+
 	/// @brief Number of instances of the concrete type of this solver.
 	unsigned int getSolverTypeCount() const
 	{
@@ -152,6 +157,9 @@ class BackboneSolverInterface : public SharingEntity
 
 	/// @brief Id of the solver among the solvers of the same type.
 	unsigned int m_solverTypeId;
+
+	/// @brief Export the backbone literals found as unit clauses (set per worker by -bb-share-units).
+	bool m_shareBackboneUnits = true;
 
 	static inline std::unordered_map<std::type_index, std::atomic<unsigned int>> s_instanceCounts;
 };
