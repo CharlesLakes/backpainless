@@ -6,6 +6,8 @@
 #pragma once
 
 #include "containers/BackboneResult.hpp"
+#include "containers/CandidateBoard.hpp"
+#include "solvers/CandidateOrder.hpp"
 #include "containers/ClauseDatabase.hpp"
 #include "containers/ClauseExchange.hpp"
 #include "containers/ClauseUtils.hpp"
@@ -35,7 +37,8 @@ using SeedGenerator = std::function<int(BackboneSolverInterface*)>;
 /// Code for the type of backbone solvers
 enum class BackboneSolverType
 {
-	CADIBACK = 0 ///< CadiBack algorithm on top of CaDiCaL
+	CADIBACK = 0,	  ///< CadiBack algorithm on top of CaDiCaL
+	CADIBACK_SQRT = 1 ///< CadiBack applied block by block (sqrt(#candidates) blocks)
 };
 
 /**
@@ -112,6 +115,23 @@ class BackboneSolverInterface : public SharingEntity
 
 	void setShareBackboneUnits(bool value) { this->m_shareBackboneUnits = value; }
 
+	/// @brief Connects the board of decided variables (-bb-share-cand) and selects how this solver uses it.
+	void setCandidateBoard(const std::shared_ptr<CandidateBoard>& board, bool publish, bool consume)
+	{
+		this->m_candidateBoard = board;
+		this->m_publishCandidates = board && publish;
+		this->m_consumeCandidates = board && consume;
+	}
+
+	bool getPublishCandidates() const { return this->m_publishCandidates; }
+
+	bool getConsumeCandidates() const { return this->m_consumeCandidates; }
+
+	/// @brief Order of the initial candidates (set per worker by -bb-order).
+	CandidateOrder getCandidateOrder() const { return this->m_candidateOrder; }
+
+	void setCandidateOrder(CandidateOrder order) { this->m_candidateOrder = order; }
+
 	/// @brief Number of instances of the concrete type of this solver.
 	unsigned int getSolverTypeCount() const
 	{
@@ -160,6 +180,18 @@ class BackboneSolverInterface : public SharingEntity
 
 	/// @brief Export the backbone literals found as unit clauses (set per worker by -bb-share-units).
 	bool m_shareBackboneUnits = true;
+
+	/// @brief Board of decided variables shared by the solvers of the process, null when -bb-share-cand is off.
+	std::shared_ptr<CandidateBoard> m_candidateBoard;
+
+	/// @brief Publish the variables decided by this solver on @ref m_candidateBoard.
+	bool m_publishCandidates = false;
+
+	/// @brief Drop the candidates already decided on @ref m_candidateBoard.
+	bool m_consumeCandidates = false;
+
+	/// @brief Order of the initial candidates (-bb-order).
+	CandidateOrder m_candidateOrder = CandidateOrder::NATURAL;
 
 	static inline std::unordered_map<std::type_index, std::atomic<unsigned int>> s_instanceCounts;
 };

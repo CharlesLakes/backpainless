@@ -3,7 +3,8 @@
 #include "utils/Logger.hpp"
 #include "utils/Parameters.hpp"
 
-#include "solvers/CDCL/CadiBack.hpp"
+#include "solvers/CDCL/cadiback/CadiBack.hpp"
+#include "solvers/CDCL/cadiback/CadiBackSqrt.hpp"
 
 #include "containers/ClauseDatabases/ClauseDatabaseFactory.hpp"
 
@@ -19,16 +20,20 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 {
 	/* Validated by Parameters::init */
 	const std::string& shareMask = __globalParameters__.backboneShareUnits;
+	std::vector<CandidateOrder> orders;
+	parseCandidateOrderList(__globalParameters__.backboneOrder, orders);
 
 	for (auto solver : solvers) {
 		solver->setSolverId(gIDScaler(solver));
 		solver->setSolverTypeId(typeIDScaler(solver));
 		/* Indexed by the global id, so that the mask also applies across MPI ranks */
 		solver->setShareBackboneUnits(shareMask[solver->getSolverId() % shareMask.size()] == '1');
-		LOGDEBUG1("Computing Id %d,%d, share backbone units: %d",
+		solver->setCandidateOrder(orders[solver->getSolverId() % orders.size()]);
+		LOGDEBUG1("Computing Id %d,%d, share backbone units: %d, candidate order: %s",
 				  solver->getSolverId(),
 				  solver->getSolverTypeId(),
-				  solver->getShareBackboneUnits());
+				  solver->getShareBackboneUnits(),
+				  candidateOrderName(solver->getCandidateOrder()));
 	}
 
 	for (auto solver : solvers) {
@@ -36,6 +41,27 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 	}
 
 	LOG0("Diversification done");
+}
+
+void
+BackboneSolverFactory::connectCandidateBoard(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers,
+											 unsigned int nbVars)
+{
+	/* Validated by Parameters::init: characters in 0, 1, p (publish), c (consume) */
+	const std::string& candMask = __globalParameters__.backboneShareCandidates;
+	if (candMask.find_first_not_of('0') == std::string::npos)
+		return;
+
+	auto board = std::make_shared<CandidateBoard>(nbVars);
+	for (auto solver : solvers) {
+		/* Indexed by the global id, like -bb-share-units. The board itself is local to the process */
+		char mode = candMask[solver->getSolverId() % candMask.size()];
+		solver->setCandidateBoard(board, mode == '1' || mode == 'p', mode == '1' || mode == 'c');
+		LOGDEBUG1("Solver %d candidate board: publish %d, consume %d",
+				  solver->getSolverId(),
+				  solver->getPublishCandidates(),
+				  solver->getConsumeCandidates());
+	}
 }
 
 std::shared_ptr<BackboneSolverInterface>
@@ -57,6 +83,8 @@ BackboneSolverFactory::createSolver(char type, char importDBType)
 	switch (type) {
 		case 'c':
 			return std::make_shared<CadiBack>(id, importDB);
+		case 's':
+			return std::make_shared<CadiBackSqrt>(id, importDB);
 
 		default:
 			LOGERROR("The backbone solver type '%c' specified is not available!", type);

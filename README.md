@@ -28,7 +28,7 @@ The following documentation is inherited from Painless and describes the shared 
 - `src/containers/`: Data structures for clause management, formula representation and the `BackboneResult` type
 - `src/sharing/`: Learnt clause sharing management and strategies
 - `src/working/`: Worker organization and portfolio implementation
-- `src/solvers/`: Backbone solver interface, factory and implementations (`CDCL/CadiBack`)
+- `src/solvers/`: Backbone solver interface, factory and implementations (`CDCL/cadiback/`: `CadiBackBase` and its variants)
 - `src/utils/`: Helper utilities and data structures
 - `src/preprocessors/`: Phase initialization (GaspiInitializer)
 - `src/disabled/`: Code kept for later reintegration but not compiled: PRS and SBVA preprocessing and the PRS portfolio. These preprocessors only preserve satisfiability, so they would change the backbone.

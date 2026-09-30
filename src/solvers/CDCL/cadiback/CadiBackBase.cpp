@@ -1,4 +1,4 @@
-#include "solvers/CDCL/CadiBack.hpp"
+#include "solvers/CDCL/cadiback/CadiBackBase.hpp"
 
 #include "utils/ErrorCodes.hpp"
 #include "utils/Logger.hpp"
@@ -17,7 +17,7 @@
 /*------------------------Learner-------------------------*/
 
 bool
-CadiBack::learning(int size, int glue)
+CadiBackBase::learning(int size, int glue)
 {
 	if (size > 0) {
 		LOGDEBUG3("CadiBack %d will export clause of size %d, glue %d", this->getSolverId(), size, glue);
@@ -30,7 +30,7 @@ CadiBack::learning(int size, int glue)
 }
 
 void
-CadiBack::learn(int lit)
+CadiBackBase::learn(int lit)
 {
 	if (lit)
 		tempClause.push_back(lit);
@@ -55,7 +55,7 @@ CadiBack::learn(int lit)
 }
 
 bool
-CadiBack::hasClauseToImport()
+CadiBackBase::hasClauseToImport()
 {
 	if (this->m_clausesToImport->getOneClause(tempClauseToImport)) {
 		LOGDEBUG3("CadiBack %u will import clause %s", this->getSharingId(), tempClauseToImport->toString().c_str());
@@ -67,7 +67,7 @@ CadiBack::hasClauseToImport()
 }
 
 void
-CadiBack::getClauseToImport(std::vector<int>& clause, int& glue)
+CadiBackBase::getClauseToImport(std::vector<int>& clause, int& glue)
 {
 	assert((tempClauseToImport->size > 1 && tempClauseToImport->lbd > 0) ||
 		   (tempClauseToImport->size == 1 && tempClauseToImport->lbd >= 0));
@@ -81,19 +81,18 @@ CadiBack::getClauseToImport(std::vector<int>& clause, int& glue)
 
 /*----------------------Main Class------------------------*/
 
-CadiBack::CadiBack(int id, const std::shared_ptr<ClauseDatabase>& clauseDB)
-	: BackboneSolverInterface(id, clauseDB, BackboneSolverType::CADIBACK)
+CadiBackBase::CadiBackBase(int id, const std::shared_ptr<ClauseDatabase>& clauseDB, BackboneSolverType type)
+	: BackboneSolverInterface(id, clauseDB, type)
 	, stopSolver(false)
 {
 	solver = std::make_unique<CaDiCaL::Solver>();
 	solver->connect_learner(this);
 	solver->connect_terminator(this);
 	this->initCadicalOptions();
-
-	initializeTypeId<CadiBack>();
+	/* initializeTypeId is called by each variant, so that the diversification cycles over the workers of a variant */
 }
 
-CadiBack::~CadiBack()
+CadiBackBase::~CadiBackBase()
 {
 	solver->terminate(); /* just in case */
 	solver->disconnect_learner();
@@ -103,7 +102,7 @@ CadiBack::~CadiBack()
 /* Backbone extraction */
 
 int
-CadiBack::solveUnderConstraint(const std::vector<int>& constraint)
+CadiBackBase::solveUnderConstraint(const std::vector<int>& constraint)
 {
 	/* The interrupt flag is not reset here: an interrupt arriving between two incremental calls must not be lost */
 	if (!constraint.empty()) {
@@ -117,7 +116,7 @@ CadiBack::solveUnderConstraint(const std::vector<int>& constraint)
 }
 
 BackboneResult
-CadiBack::solve(const std::vector<int>& cube)
+CadiBackBase::solve(const std::vector<int>& cube)
 {
 	if (!this->isInitialized()) {
 		LOGWARN("CadiBack %d was not initialized to be launched!", this->getSolverId());
@@ -129,14 +128,13 @@ CadiBack::solve(const std::vector<int>& cube)
 
 	m_backbone.clear();
 
-	const unsigned long chunkRate = __globalParameters__.backboneChunkRate;
-	const size_t infinite = std::numeric_limits<size_t>::max();
+	m_chunkRate = __globalParameters__.backboneChunkRate;
 
 	/* (res, sigma) <- SAT(phi) */
 	int res = solveUnderConstraint({});
 
 	if (res == 20) {
-		LOGSTAT("CadiBack %d: formula is UNSATISFIABLE", this->getSolverId());
+		LOGSTAT("%s %d: formula is UNSATISFIABLE", variantName(), this->getSolverId());
 		return BackboneResult::UNSAT;
 	}
 	if (res != 10 || stopSolver)
@@ -151,49 +149,55 @@ CadiBack::solve(const std::vector<int>& cube)
 		candidates.push_back((solver->val(var) > 0) ? var : -var);
 	filterWithModel(candidates);
 
-	LOG1("CadiBack %d: %zu initial candidates out of %u variables", this->getSolverId(), candidates.size(), m_nbVars);
+	if (m_occurrences.empty() &&
+		(m_candidateOrder == CandidateOrder::OCC || m_candidateOrder == CandidateOrder::OCC_REV))
+		LOGWARN("%s %d: no clause occurrences (formula loaded from file), -bb-order=%s falls back to natural",
+				variantName(),
+				this->getSolverId(),
+				candidateOrderName(m_candidateOrder));
+	sortCandidates(candidates, m_candidateOrder, m_occurrences, m_seed);
+	initCandidates(candidates);
+
+	LOG1("%s %d: %zu initial candidates out of %u variables, order %s",
+		 variantName(),
+		 this->getSolverId(),
+		 candidates.size(),
+		 m_nbVars,
+		 candidateOrderName(m_candidateOrder));
 
 	/* As in cadiback.cpp: without chunking (K = 0) the constraint always holds all remaining candidates. With chunking
 	 * the size is reset to 1 after a SAT answer and multiplied by K after an UNSAT answer (K = 1: one-by-one) */
-	size_t k = (chunkRate == 0) ? infinite : 1;
-	std::vector<int> constraint;
+	m_chunkSize = (m_chunkRate == 0) ? std::numeric_limits<size_t>::max() : 1;
+	std::vector<int> chunk, constraint;
 
 	while (!candidates.empty()) {
 		if (stopSolver)
 			return BackboneResult::UNKNOWN;
 
-		/* B <- B u F, Lambda <- Lambda \ F */
+		/* Candidates decided by the other solvers (-bb-share-cand), then B <- B u F, Lambda <- Lambda \ F */
+		syncWithBoard(candidates);
 		extractFixed(candidates);
 		if (candidates.empty())
 			break;
 
-		/* Gamma <- first min(k, |Lambda|) candidates, rho <- OR of the negations */
-		size_t chunkSize = std::min(k, candidates.size());
+		/* Gamma <- selected chunk of Lambda, rho <- OR of the negations */
+		chunk.clear();
+		selectChunk(candidates, chunk);
+		assert(!chunk.empty() && chunk.size() <= candidates.size());
 		constraint.clear();
-		for (size_t i = 0; i < chunkSize; i++)
-			constraint.push_back(-candidates[i]);
+		for (int lit : chunk)
+			constraint.push_back(-lit);
 
 		res = solveUnderConstraint(constraint);
 
 		if (res == 10) {
 			/* The new model disagrees with at least one literal of the chunk */
 			m_satAnswers++;
-			filterWithModel(candidates);
-			if (chunkRate != 0)
-				k = 1;
+			onSat(candidates, chunk);
 		} else if (res == 20) {
-			/* No model falsifies a literal of the chunk: all of them are backbone literals. cadiback.cpp does not add
-			 * them to the solver (CaDiCaL learns them implicitly); adding the units is sound and makes them fixed */
+			/* No model falsifies a literal of the chunk: all of them are backbone literals */
 			m_unsatAnswers++;
-			for (size_t i = 0; i < chunkSize; i++) {
-				addBackboneLiteral(candidates[i]);
-				solver->add(candidates[i]);
-				solver->add(0);
-			}
-			candidates.erase(candidates.begin(), candidates.begin() + chunkSize);
-
-			if (chunkRate != 0)
-				k = (k > infinite / chunkRate) ? infinite : k * chunkRate;
+			onUnsat(candidates, chunk);
 		} else {
 			return BackboneResult::UNKNOWN; /* interrupted */
 		}
@@ -201,7 +205,8 @@ CadiBack::solve(const std::vector<int>& cube)
 
 	std::sort(m_backbone.begin(), m_backbone.end(), [](int a, int b) { return std::abs(a) < std::abs(b); });
 
-	LOGSTAT("CadiBack %d: formula is SATISFIABLE, backbone size %zu / %u variables (%lu SAT calls)",
+	LOGSTAT("%s %d: formula is SATISFIABLE, backbone size %zu / %u variables (%lu SAT calls)",
+			variantName(),
 			this->getSolverId(),
 			m_backbone.size(),
 			m_nbVars,
@@ -210,8 +215,74 @@ CadiBack::solve(const std::vector<int>& cube)
 	return BackboneResult::COMPLETE;
 }
 
+/* Default hooks: the algorithm of the paper */
+
 void
-CadiBack::extractFixed(std::vector<int>& candidates)
+CadiBackBase::initCandidates(std::vector<int>& /* candidates */)
+{
+	/* The order is the one of -bb-order (natural by default, as cadiback.cpp) */
+}
+
+void
+CadiBackBase::selectChunk(const std::vector<int>& candidates, std::vector<int>& chunk)
+{
+	size_t chunkSize = std::min(m_chunkSize, candidates.size());
+	chunk.assign(candidates.begin(), candidates.begin() + chunkSize);
+}
+
+void
+CadiBackBase::onSat(std::vector<int>& candidates, const std::vector<int>& /* chunk */)
+{
+	filterWithModel(candidates);
+	if (m_chunkRate != 0)
+		m_chunkSize = 1;
+}
+
+void
+CadiBackBase::onUnsat(std::vector<int>& candidates, const std::vector<int>& chunk)
+{
+	for (int lit : chunk)
+		commitBackbone(lit);
+	removeCandidates(candidates, chunk);
+
+	if (m_chunkRate != 0) {
+		const size_t infinite = std::numeric_limits<size_t>::max();
+		m_chunkSize = (m_chunkSize > infinite / m_chunkRate) ? infinite : m_chunkSize * m_chunkRate;
+	}
+}
+
+/* Helpers */
+
+void
+CadiBackBase::commitBackbone(int lit)
+{
+	/* cadiback.cpp does not add the backbone literals to the solver (CaDiCaL learns them implicitly); adding the units
+	 * is sound and makes them fixed */
+	addBackboneLiteral(lit);
+	solver->add(lit);
+	solver->add(0);
+}
+
+void
+CadiBackBase::removeCandidates(std::vector<int>& candidates, const std::vector<int>& lits)
+{
+	/* Fast path of the default selectChunk: the literals are a prefix of the candidates */
+	if (lits.size() <= candidates.size() && std::equal(lits.begin(), lits.end(), candidates.begin())) {
+		candidates.erase(candidates.begin(), candidates.begin() + lits.size());
+		return;
+	}
+
+	std::vector<char> removed(m_nbVars + 1, 0);
+	for (int lit : lits)
+		removed[std::abs(lit)] = 1;
+	candidates.erase(std::remove_if(candidates.begin(),
+									candidates.end(),
+									[&removed](int lit) { return removed[std::abs(lit)]; }),
+					 candidates.end());
+}
+
+void
+CadiBackBase::extractFixed(std::vector<int>& candidates)
 {
 	/* Same as fix_candidate in cadiback.cpp: fixed true -> backbone, fixed false -> dropped */
 	size_t kept = 0;
@@ -228,9 +299,12 @@ CadiBack::extractFixed(std::vector<int>& candidates)
 }
 
 void
-CadiBack::addBackboneLiteral(int lit)
+CadiBackBase::addBackboneLiteral(int lit)
 {
 	m_backbone.push_back(lit);
+
+	if (m_publishCandidates)
+		m_candidateBoard->publishBackbone(lit);
 
 	if (!m_shareBackboneUnits)
 		return;
@@ -245,34 +319,67 @@ CadiBack::addBackboneLiteral(int lit)
 }
 
 void
-CadiBack::filterWithModel(std::vector<int>& candidates)
+CadiBackBase::filterWithModel(std::vector<int>& candidates)
 {
 	/* filter_candidates and try_to_flip_remaining of cadiback.cpp */
 	const bool useFlip = !__globalParameters__.backboneNoFlip;
 
+	/* A candidate was true in an earlier model; false or flippable in this model (a model of the formula, the
+	 * constraint only acts on decisions) means that both values of its variable appear in models: it is free */
 	candidates.erase(std::remove_if(candidates.begin(),
 									candidates.end(),
 									[this, useFlip](int lit) {
-										return solver->val(lit) <= 0 || (useFlip && solver->flippable(lit));
+										bool drop = solver->val(lit) <= 0 || (useFlip && solver->flippable(lit));
+										if (drop && m_publishCandidates)
+											m_candidateBoard->publishFree(lit);
+										return drop;
 									}),
 					 candidates.end());
 }
 
+void
+CadiBackBase::syncWithBoard(std::vector<int>& candidates)
+{
+	if (!m_consumeCandidates)
+		return;
+
+	size_t kept = 0;
+	for (int lit : candidates) {
+		int status = m_candidateBoard->status(lit);
+		if (status == 0) {
+			candidates[kept++] = lit;
+		} else if (status == CandidateBoard::FREE) {
+			m_boardFree++;
+			LOGDEBUG2("CadiBack %d took free variable %d from the board", this->getSolverId(), std::abs(lit));
+		} else {
+			/* A backbone literal is true in every model, hence in the one that made it a candidate here */
+			assert(status == lit);
+			/* Not exported again as a unit: the solver that proved it already did (if its mask allows it) */
+			m_backbone.push_back(lit);
+			solver->add(lit);
+			solver->add(0);
+			m_boardBackbone++;
+			LOGDEBUG2("CadiBack %d took backbone literal %d from the board", this->getSolverId(), lit);
+		}
+	}
+	candidates.resize(kept);
+}
+
 std::vector<int>
-CadiBack::getBackbone()
+CadiBackBase::getBackbone()
 {
 	return m_backbone;
 }
 
 void
-CadiBack::setSolverInterrupt()
+CadiBackBase::setSolverInterrupt()
 {
 	this->stopSolver = true;
-	LOGDEBUG1("Asking CadiBack (%d, %u) to end", this->getSolverId(), this->getSolverTypeId());
+	LOGDEBUG1("Asking %s (%d, %u) to end", variantName(), this->getSolverId(), this->getSolverTypeId());
 }
 
 void
-CadiBack::unsetSolverInterrupt()
+CadiBackBase::unsetSolverInterrupt()
 {
 	this->stopSolver = false;
 }
@@ -280,7 +387,7 @@ CadiBack::unsetSolverInterrupt()
 /* Options and diversification */
 
 void
-CadiBack::initCadicalOptions()
+CadiBackBase::initCadicalOptions()
 {
 #ifndef NDEBUG
 	cadicalOptions.insert({ "quiet", 0 });
@@ -351,7 +458,7 @@ CadiBack::initCadicalOptions()
 }
 
 void
-CadiBack::applyCadicalOptions()
+CadiBackBase::applyCadicalOptions()
 {
 	for (auto& opt : cadicalOptions) {
 		/* not inside an assert: it would be removed with -DNDEBUG */
@@ -365,10 +472,11 @@ static std::mt19937 engine;
 static std::uniform_int_distribution<unsigned> uniform(0, 100);
 
 void
-CadiBack::diversify(const SeedGenerator& getSeed)
+CadiBackBase::diversify(const SeedGenerator& getSeed)
 {
 	unsigned int typeId = this->getSolverTypeId();
 	unsigned int generalSeed = getSeed(this);
+	m_seed = generalSeed;
 
 	cadicalOptions.at("seed") = generalSeed;
 	cadicalOptions.at("phase") = generalSeed % 2;
@@ -431,7 +539,7 @@ CadiBack::diversify(const SeedGenerator& getSeed)
 /* Formula */
 
 void
-CadiBack::loadFormula(const char* filename)
+CadiBackBase::loadFormula(const char* filename)
 {
 	int nbVars;
 	int strict = 2;
@@ -441,12 +549,15 @@ CadiBack::loadFormula(const char* filename)
 }
 
 void
-CadiBack::addInitialClauses(const std::vector<simpleClause>& clauses, unsigned int nbVars)
+CadiBackBase::addInitialClauses(const std::vector<simpleClause>& clauses, unsigned int nbVars)
 {
 	solver->reserve(nbVars);
+	m_occurrences.reset(nbVars);
 
 	for (auto& clause : clauses) {
 		solver->clause(clause);
+		for (int lit : clause)
+			m_occurrences.count(lit);
 	}
 	m_nbVars = nbVars;
 	this->setInitialized(true);
@@ -457,14 +568,16 @@ CadiBack::addInitialClauses(const std::vector<simpleClause>& clauses, unsigned i
 }
 
 void
-CadiBack::addInitialClauses(const lit_t* literals, unsigned int clsCount, unsigned int nbVars)
+CadiBackBase::addInitialClauses(const lit_t* literals, unsigned int clsCount, unsigned int nbVars)
 {
 	solver->reserve(nbVars);
+	m_occurrences.reset(nbVars);
 
 	unsigned int clausesCount = 0;
 	int lit;
 	for (lit = *literals; clausesCount < clsCount; literals++, lit = *literals) {
 		solver->add(lit);
+		m_occurrences.count(lit);
 		if (!lit)
 			clausesCount++;
 	}
@@ -474,13 +587,13 @@ CadiBack::addInitialClauses(const lit_t* literals, unsigned int clsCount, unsign
 }
 
 unsigned int
-CadiBack::getVariablesCount()
+CadiBackBase::getVariablesCount()
 {
 	return m_nbVars;
 }
 
 void
-CadiBack::setPhase(const unsigned int var, const bool phase)
+CadiBackBase::setPhase(const unsigned int var, const bool phase)
 {
 	solver->phase((phase) ? var : -var);
 }
@@ -488,7 +601,7 @@ CadiBack::setPhase(const unsigned int var, const bool phase)
 /* Sharing */
 
 bool
-CadiBack::importClause(const ClauseExchangePtr& clause)
+CadiBackBase::importClause(const ClauseExchangePtr& clause)
 {
 	assert(clause->size > 0);
 	m_clausesToImport->addClause(clause);
@@ -496,7 +609,7 @@ CadiBack::importClause(const ClauseExchangePtr& clause)
 }
 
 void
-CadiBack::importClauses(const std::vector<ClauseExchangePtr>& clauses)
+CadiBackBase::importClauses(const std::vector<ClauseExchangePtr>& clauses)
 {
 	for (auto cls : clauses) {
 		importClause(cls);
@@ -506,11 +619,11 @@ CadiBack::importClauses(const std::vector<ClauseExchangePtr>& clauses)
 /* Statistics */
 
 void
-CadiBack::printStatistics()
+CadiBackBase::printStatistics()
 {
 	CaDiCaL::Stats* cstats = solver->getStatistics();
 
-	std::cout << "c" << std::left << std::setw(15) << ("| CB" + std::to_string(this->getSolverTypeId()))
+	std::cout << "c" << std::left << std::setw(15) << ("| " + std::string(variantName()) + std::to_string(this->getSolverTypeId()))
 			  << std::setw(20) << ("| " + std::to_string(cstats->conflicts)) << std::setw(20)
 			  << ("| " + std::to_string(cstats->propagations.search)) << std::setw(17)
 			  << ("| " + std::to_string(m_satCalls)) << std::setw(20) << ("| " + std::to_string(m_backbone.size()))
@@ -519,15 +632,22 @@ CadiBack::printStatistics()
 }
 
 void
-CadiBack::printWinningLog()
+CadiBackBase::printWinningLog()
 {
 	BackboneSolverInterface::printWinningLog();
-	LOGSTAT("The winner is CadiBack(%d, %d): %lu SAT calls (%lu SAT, %lu UNSAT), %lu fixed literals, backbone size %zu",
+	LOGSTAT("The winner is %s(%d, %d), order %s: %lu SAT calls (%lu SAT, %lu UNSAT), %lu fixed literals, backbone "
+			"size %zu",
+			variantName(),
 			this->getSolverId(),
 			this->getSolverTypeId(),
+			candidateOrderName(m_candidateOrder),
 			m_satCalls,
 			m_satAnswers,
 			m_unsatAnswers,
 			m_fixedFound,
 			m_backbone.size());
+	if (m_consumeCandidates)
+		LOGSTAT("From the candidate board: %lu free variables dropped, %lu backbone literals taken",
+				m_boardFree,
+				m_boardBackbone);
 }

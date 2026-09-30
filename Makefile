@@ -59,7 +59,7 @@ M4RI_DIR := $(LIBS_DIR)/m4ri-20200125
 
 # Define dependencies
 # ===================
-# Only CaDiCaL is linked: it is the SAT engine of the CadiBack backbone solver (src/solvers/CDCL/CadiBack).
+# Only CaDiCaL is linked: it is the SAT engine of the CadiBack backbone solver (src/solvers/CDCL/cadiback/).
 # The other vendored solvers in solvers/ can still be built with their own targets (make kissat, make solvers, ...).
 DEPENDENCIES := $(CADICAL_BUILD)/libcadical.a
 
