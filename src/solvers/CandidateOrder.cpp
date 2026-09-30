@@ -18,6 +18,7 @@ parseCandidateOrder(const std::string& name, CandidateOrder& order)
 		order = CandidateOrder::OCC;
 	else if (name == "occ-rev")
 		order = CandidateOrder::OCC_REV;
+	/* NEW ORDER (2/6): else if (name == "<name>") order = CandidateOrder::<VALUE>; */
 	else
 		return false;
 	return true;
@@ -54,6 +55,7 @@ candidateOrderName(CandidateOrder order)
 			return "occ";
 		case CandidateOrder::OCC_REV:
 			return "occ-rev";
+		/* NEW ORDER (3/6): case CandidateOrder::<VALUE>: return "<name>"; */
 	}
 	return "unknown";
 }
@@ -89,5 +91,7 @@ sortCandidates(std::vector<int>& candidates,
 			});
 			break;
 		}
+		/* NEW ORDER (4/6): case CandidateOrder::<VALUE>: reorder 'candidates' (already sorted by variable, so a
+		 * std::stable_sort keeps the variable order for ties); every candidate must stay */
 	}
 }

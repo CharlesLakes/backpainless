@@ -42,6 +42,7 @@
 		  "0",                                                                                                               \
 		  "Mask cycled over the solver ids for the board of decided variables: 0 off, 1 publish and consume, p publish, "    \
 		  "c consume")                                                                                                       \
+	/* NEW ORDER (5/6): add the name to this help and to DETAILED_HELP_BACKBONE below */                                \
 	PARAM(backboneOrder,                                                                                                  \
 		  std::string,                                                                                                       \
 		  "bb-order",                                                                                                        \

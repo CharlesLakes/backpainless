@@ -9,6 +9,8 @@
  *
  * The order only decides which candidates are tried first (the first ones of the chunk, or the blocks of a variant),
  * every order is sound.
+ *
+ * To add an order, edit the 6 places marked "NEW ORDER (i/6)".
  */
 enum class CandidateOrder
 {
@@ -16,7 +18,8 @@ enum class CandidateOrder
 	REVERSE, ///< by decreasing variable index
 	RANDOM,	 ///< shuffled with the seed of the solver
 	OCC,	 ///< by decreasing number of occurrences of the candidate literal in the formula
-	OCC_REV	 ///< by increasing number of occurrences of the candidate literal in the formula
+	OCC_REV, ///< by increasing number of occurrences of the candidate literal in the formula
+	/* NEW ORDER (1/6): add the value here */
 };
 
 /// @brief Parses one order name (natural, reverse, random, occ, occ-rev). Returns false for an unknown name.

@@ -127,6 +127,7 @@ Parameters::init(int argc, char** argv)
 		exit(PERR_ARGS_ERROR);
 	}
 
+	/* NEW ORDER (6/6): add the name to this error message */
 	std::vector<CandidateOrder> orders;
 	if (!parseCandidateOrderList(__globalParameters__.backboneOrder, orders)) {
 		LOGERROR("Invalid -bb-order=%s: expected a comma-separated list of natural, reverse, random, occ, occ-rev",
