@@ -145,6 +145,10 @@ class CadiBackBase
 	/// (only if enabled for this worker by -bb-share-units) and publishes it on the candidate board (-bb-share-cand).
 	void addBackboneLiteral(int lit);
 
+	/// @brief Records that the variable of @p lit is free (both values appear in models): publishes it on the
+	/// candidate board (only if enabled for this worker by -bb-share-cand).
+	void addFreeVariable(int lit);
+
 	/// @brief With -bb-share-cand consume: drops the candidates whose variable another solver published as free and
 	/// moves the ones it published as backbone to @ref m_backbone (also added to CaDiCaL as units). Called by the loop
 	/// of solve() before each chunk, so every variant benefits from it.

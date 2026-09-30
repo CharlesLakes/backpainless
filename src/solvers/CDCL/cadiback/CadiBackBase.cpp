@@ -319,6 +319,13 @@ CadiBackBase::addBackboneLiteral(int lit)
 }
 
 void
+CadiBackBase::addFreeVariable(int lit)
+{
+	if (m_publishCandidates)
+		m_candidateBoard->publishFree(lit);
+}
+
+void
 CadiBackBase::filterWithModel(std::vector<int>& candidates)
 {
 	/* filter_candidates and try_to_flip_remaining of cadiback.cpp */
@@ -330,8 +337,8 @@ CadiBackBase::filterWithModel(std::vector<int>& candidates)
 									candidates.end(),
 									[this, useFlip](int lit) {
 										bool drop = solver->val(lit) <= 0 || (useFlip && solver->flippable(lit));
-										if (drop && m_publishCandidates)
-											m_candidateBoard->publishFree(lit);
+										if (drop)
+											addFreeVariable(lit);
 										return drop;
 									}),
 					 candidates.end());

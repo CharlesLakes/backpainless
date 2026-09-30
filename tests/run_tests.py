@@ -252,6 +252,9 @@ BRUTEFORCE_CONFIGS = [
     ["-c=8", "-bb-share-cand=1", "-bb-chunk=1"],
     ["-c=8", "-bb-share-cand=pc", "-bb-chunk=10", "-bb-share-units=0"],
     ["-c=4", "-bb-share-cand=1c0", "-bb-no-flip", "-bb-chunk=1"],
+    # variants (s = CadiBackSqrt) and candidate orders; -bb-chunk=0 is the sieve (whole candidates / whole block)
+    ["-c=3", "-solver=cs", "-bb-chunk=1", "-bb-order=natural,random,occ"],
+    ["-c=4", "-solver=s", "-bb-chunk=0", "-bb-order=reverse,occ-rev", "-bb-share-cand=1"],
 ]
 
 
