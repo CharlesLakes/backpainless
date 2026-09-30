@@ -128,8 +128,6 @@ CadiBackBase::solve(const std::vector<int>& cube)
 
 	m_backbone.clear();
 
-	m_chunkRate = __globalParameters__.backboneChunkRate;
-
 	/* (res, sigma) <- SAT(phi) */
 	int res = solveUnderConstraint({});
 
@@ -165,8 +163,9 @@ CadiBackBase::solve(const std::vector<int>& cube)
 		 m_nbVars,
 		 candidateOrderName(m_candidateOrder));
 
-	/* As in cadiback.cpp: without chunking (K = 0) the constraint always holds all remaining candidates. With chunking
-	 * the size is reset to 1 after a SAT answer and multiplied by K after an UNSAT answer (K = 1: one-by-one) */
+	/* K = 0: the constraint always holds all remaining candidates (the default K = infinity of the paper and cadiback.cpp
+	 * also resets to 1 after a SAT answer, as a large K does here). K > 0: as the paper, the size is reset to 1 after a
+	 * SAT answer and multiplied by K after an UNSAT answer (K = 1: one-by-one, K = 10: cadiback --chunking) */
 	m_chunkSize = (m_chunkRate == 0) ? std::numeric_limits<size_t>::max() : 1;
 	std::vector<int> chunk, constraint;
 
@@ -642,12 +641,13 @@ void
 CadiBackBase::printWinningLog()
 {
 	BackboneSolverInterface::printWinningLog();
-	LOGSTAT("The winner is %s(%d, %d), order %s: %lu SAT calls (%lu SAT, %lu UNSAT), %lu fixed literals, backbone "
-			"size %zu",
+	LOGSTAT("The winner is %s(%d, %d), order %s, chunk %lu: %lu SAT calls (%lu SAT, %lu UNSAT), %lu fixed literals, "
+			"backbone size %zu",
 			variantName(),
 			this->getSolverId(),
 			this->getSolverTypeId(),
 			candidateOrderName(m_candidateOrder),
+			m_chunkRate,
 			m_satCalls,
 			m_satAnswers,
 			m_unsatAnswers,

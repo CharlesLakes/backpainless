@@ -119,9 +119,6 @@ class CadiBackBase
 	/// @brief Removes the literals of @p lits from @p candidates, keeping the order of the others.
 	void removeCandidates(std::vector<int>& candidates, const std::vector<int>& lits);
 
-	/// @brief Chunk rate K (-bb-chunk) read at the start of solve(): 0 = all candidates, 1 = one-by-one, K>1 = growth.
-	unsigned long m_chunkRate = 0;
-
 	/// @brief Size of the next chunk for the default selectChunk (SIZE_MAX when the chunk holds all candidates).
 	size_t m_chunkSize = 0;
 

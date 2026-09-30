@@ -218,6 +218,7 @@ The analysis provides:
   [optional footer(s)]
   ```
   Common types are `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci` and `chore`. A breaking change is marked with `!` after the type/scope, or with a `BREAKING CHANGE:` footer. For example, `fix(solvers): disable CaDiCaL reimply for flippable checks`.
+- **Per-worker search options:** BackPainLess keeps the heterogeneous portfolio of Painless, where every worker shares with all the others whatever its configuration. An option of the backbone search must therefore be settable per worker: a comma-separated list or a mask cycled over the solver ids and assigned in `BackboneSolverFactory::diversification` (as `-solver`, `-bb-order`, `-bb-chunk`, `-bb-share-units`, `-bb-share-cand`), never a global value read inside `solve()`. A single value keeps meaning "the same for every worker".
 - **AI coding assistants** follow the rules of the Linux kernel [AI Coding Assistants](https://docs.kernel.org/process/coding-assistants.html) guide:
   - AI agents MUST NOT add `Signed-off-by` tags. Only the human submitter can certify the contribution.
   - The human submitter reviews all AI-generated code and takes full responsibility for it.

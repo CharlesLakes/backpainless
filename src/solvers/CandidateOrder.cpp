@@ -41,6 +41,21 @@ parseCandidateOrderList(const std::string& list, std::vector<CandidateOrder>& or
 	return !orders.empty() && orders.size() == fields;
 }
 
+bool
+parseChunkRateList(const std::string& list, std::vector<unsigned long>& rates)
+{
+	rates.clear();
+	std::stringstream stream(list);
+	std::string field;
+	size_t fields = std::count(list.begin(), list.end(), ',') + 1;
+	while (std::getline(stream, field, ',')) {
+		if (field.empty() || field.size() > 18 || field.find_first_not_of("0123456789") != std::string::npos)
+			return false;
+		rates.push_back(std::stoul(field));
+	}
+	return !rates.empty() && rates.size() == fields;
+}
+
 const char*
 candidateOrderName(CandidateOrder order)
 {

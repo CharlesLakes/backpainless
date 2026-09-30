@@ -132,6 +132,11 @@ class BackboneSolverInterface : public SharingEntity
 
 	void setCandidateOrder(CandidateOrder order) { this->m_candidateOrder = order; }
 
+	/// @brief Chunk rate K (set per worker by -bb-chunk): 0 = all candidates, 1 = one-by-one, K>1 = growth.
+	unsigned long getChunkRate() const { return this->m_chunkRate; }
+
+	void setChunkRate(unsigned long rate) { this->m_chunkRate = rate; }
+
 	/// @brief Number of instances of the concrete type of this solver.
 	unsigned int getSolverTypeCount() const
 	{
@@ -192,6 +197,9 @@ class BackboneSolverInterface : public SharingEntity
 
 	/// @brief Order of the initial candidates (-bb-order).
 	CandidateOrder m_candidateOrder = CandidateOrder::NATURAL;
+
+	/// @brief Chunk rate K (-bb-chunk).
+	unsigned long m_chunkRate = 0;
 
 	static inline std::unordered_map<std::type_index, std::atomic<unsigned int>> s_instanceCounts;
 };

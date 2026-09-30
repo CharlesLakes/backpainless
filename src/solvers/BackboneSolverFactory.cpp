@@ -22,6 +22,8 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 	const std::string& shareMask = __globalParameters__.backboneShareUnits;
 	std::vector<CandidateOrder> orders;
 	parseCandidateOrderList(__globalParameters__.backboneOrder, orders);
+	std::vector<unsigned long> chunkRates;
+	parseChunkRateList(__globalParameters__.backboneChunkRate, chunkRates);
 
 	for (auto solver : solvers) {
 		solver->setSolverId(gIDScaler(solver));
@@ -29,11 +31,13 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 		/* Indexed by the global id, so that the mask also applies across MPI ranks */
 		solver->setShareBackboneUnits(shareMask[solver->getSolverId() % shareMask.size()] == '1');
 		solver->setCandidateOrder(orders[solver->getSolverId() % orders.size()]);
-		LOGDEBUG1("Computing Id %d,%d, share backbone units: %d, candidate order: %s",
+		solver->setChunkRate(chunkRates[solver->getSolverId() % chunkRates.size()]);
+		LOGDEBUG1("Computing Id %d,%d, share backbone units: %d, candidate order: %s, chunk rate: %lu",
 				  solver->getSolverId(),
 				  solver->getSolverTypeId(),
 				  solver->getShareBackboneUnits(),
-				  candidateOrderName(solver->getCandidateOrder()));
+				  candidateOrderName(solver->getCandidateOrder()),
+				  solver->getChunkRate());
 	}
 
 	for (auto solver : solvers) {

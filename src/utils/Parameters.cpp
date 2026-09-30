@@ -135,6 +135,13 @@ Parameters::init(int argc, char** argv)
 		exit(PERR_ARGS_ERROR);
 	}
 
+	std::vector<unsigned long> chunkRates;
+	if (!parseChunkRateList(__globalParameters__.backboneChunkRate, chunkRates)) {
+		LOGERROR("Invalid -bb-chunk=%s: expected a comma-separated list of non-negative integers",
+				 __globalParameters__.backboneChunkRate.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
 	if(!__globalParameters__.cpus)
 	{
 		__globalParameters__.cpus = std::thread::hardware_concurrency();

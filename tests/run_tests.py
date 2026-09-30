@@ -255,6 +255,9 @@ BRUTEFORCE_CONFIGS = [
     # variants (s = CadiBackSqrt) and candidate orders; -bb-chunk=0 is the sieve (whole candidates / whole block)
     ["-c=3", "-solver=cs", "-bb-chunk=1", "-bb-order=natural,random,occ"],
     ["-c=4", "-solver=s", "-bb-chunk=0", "-bb-order=reverse,occ-rev", "-bb-share-cand=1"],
+    # per-worker chunk rates (-bb-chunk list cycled over the solver ids)
+    ["-c=6", "-solver=cs", "-bb-chunk=0,1,10", "-bb-order=natural,occ,random"],
+    ["-c=4", "-solver=sc", "-bb-chunk=0,2", "-bb-share-cand=1"],
 ]
 
 
@@ -298,6 +301,7 @@ SHARING_CONFIGS = [
     ["-c=8", "-shr-strat=3", "-bb-share-units=011", "-bb-chunk=10"],
     ["-c=8", "-shr-strat=1", "-bb-share-cand=1", "-bb-chunk=1"],
     ["-c=8", "-shr-strat=2", "-bb-share-cand=pc", "-bb-chunk=10", "-bb-share-units=0"],
+    ["-c=8", "-solver=cs", "-bb-chunk=0,1,10,0", "-bb-order=natural,occ", "-bb-share-cand=1"],
 ]
 SHARING_FAST = ["-shr-sleep=10000", "-init-sleep=1000"]
 

@@ -30,6 +30,10 @@ bool parseCandidateOrderList(const std::string& list, std::vector<CandidateOrder
 
 const char* candidateOrderName(CandidateOrder order);
 
+/// @brief Parses the comma-separated list of chunk rates of -bb-chunk (non-negative integers). Returns false if it is
+/// empty or has an invalid value.
+bool parseChunkRateList(const std::string& list, std::vector<unsigned long>& rates);
+
 /// @brief Counts the occurrences of every literal, indexed by occurrenceIndex. Filled from the initial clauses.
 class LiteralOccurrences
 {
