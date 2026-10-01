@@ -302,8 +302,8 @@ CadiBackBase::addBackboneLiteral(int lit)
 {
 	m_backbone.push_back(lit);
 
-	if (m_publishCandidates)
-		m_candidateBoard->publishBackbone(lit);
+	if (m_publishCandidates && m_candidateBoard->publishBackbone(lit))
+		m_publishedBackbone++;
 
 	if (!m_shareBackboneUnits)
 		return;
@@ -320,8 +320,8 @@ CadiBackBase::addBackboneLiteral(int lit)
 void
 CadiBackBase::addFreeVariable(int lit)
 {
-	if (m_publishCandidates)
-		m_candidateBoard->publishFree(lit);
+	if (m_publishCandidates && m_candidateBoard->publishFree(lit))
+		m_publishedFree++;
 }
 
 void
@@ -635,6 +635,12 @@ CadiBackBase::printStatistics()
 			  << ("| " + std::to_string(m_satCalls)) << std::setw(20) << ("| " + std::to_string(m_backbone.size()))
 			  << std::setw(20) << "|"
 			  << "\n";
+	/* Printed under the logger lock taken by BackboneSolverFactory::printStats, so std::cout and not LOGSTAT */
+	if (m_publishCandidates || m_consumeCandidates)
+		std::cout << "c|   board, solver " << this->getSolverId() << " (" << variantName() << ", order "
+				  << candidateOrderName(m_candidateOrder) << ", chunk " << m_chunkRate << "): published first "
+				  << m_publishedFree << " free / " << m_publishedBackbone << " backbone, took " << m_boardFree
+				  << " free / " << m_boardBackbone << " backbone\n";
 }
 
 void

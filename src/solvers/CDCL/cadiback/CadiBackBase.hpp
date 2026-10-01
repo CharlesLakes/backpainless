@@ -168,6 +168,8 @@ class CadiBackBase
 	unsigned long m_fixedFound = 0;
 	unsigned long m_boardFree = 0;	   ///< candidates dropped because the board says free
 	unsigned long m_boardBackbone = 0; ///< backbone literals taken from the board
+	unsigned long m_publishedFree = 0;	   ///< free variables this solver was the first to publish on the board
+	unsigned long m_publishedBackbone = 0; ///< backbone literals this solver was the first to publish on the board
 
 	/*----------------------Learner------------------------*/
 	/// @details The Learner methods are called by CaDiCaL from the solving thread only
