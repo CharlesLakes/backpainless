@@ -103,6 +103,7 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 		};
 	}
 	BackboneSolverFactory::diversification(solvers, globalIDScaler, typeIDScaler);
+	BackboneSolverFactory::connectCandidateBoard(solvers, varCount);
 
 	LOG0("Diversified all solvers");
 

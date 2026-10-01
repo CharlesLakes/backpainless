@@ -1,6 +1,7 @@
 #include "Parameters.hpp"
 #include "ErrorCodes.hpp"
 #include "Logger.hpp"
+#include "solvers/CandidateOrder.hpp"
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
@@ -117,6 +118,27 @@ Parameters::init(int argc, char** argv)
 	const std::string& shareMask = __globalParameters__.backboneShareUnits;
 	if (shareMask.empty() || shareMask.find_first_not_of("01") != std::string::npos) {
 		LOGERROR("Invalid -bb-share-units=%s: expected a non empty mask of 0 and 1", shareMask.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
+	const std::string& candMask = __globalParameters__.backboneShareCandidates;
+	if (candMask.empty() || candMask.find_first_not_of("01pc") != std::string::npos) {
+		LOGERROR("Invalid -bb-share-cand=%s: expected a non empty mask of 0, 1, p and c", candMask.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
+	/* NEW ORDER (6/6): add the name to this error message */
+	std::vector<CandidateOrder> orders;
+	if (!parseCandidateOrderList(__globalParameters__.backboneOrder, orders)) {
+		LOGERROR("Invalid -bb-order=%s: expected a comma-separated list of natural, reverse, random, occ, occ-rev",
+				 __globalParameters__.backboneOrder.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
+	std::vector<unsigned long> chunkRates;
+	if (!parseChunkRateList(__globalParameters__.backboneChunkRate, chunkRates)) {
+		LOGERROR("Invalid -bb-chunk=%s: expected a comma-separated list of non-negative integers",
+				 __globalParameters__.backboneChunkRate.c_str());
 		exit(PERR_ARGS_ERROR);
 	}
 

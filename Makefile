@@ -59,7 +59,7 @@ M4RI_DIR := $(LIBS_DIR)/m4ri-20200125
 
 # Define dependencies
 # ===================
-# Only CaDiCaL is linked: it is the SAT engine of the CadiBack backbone solver (src/solvers/CDCL/CadiBack).
+# Only CaDiCaL is linked: it is the SAT engine of the CadiBack backbone solver (src/solvers/CDCL/cadiback/).
 # The other vendored solvers in solvers/ can still be built with their own targets (make kissat, make solvers, ...).
 DEPENDENCIES := $(CADICAL_BUILD)/libcadical.a
 
@@ -118,13 +118,17 @@ $(RELEASE_BUILD_DIR)/$(RELEASE_OUTPUT): $(RELEASE_OBJS) $(DEPENDENCIES)
 
 # Pattern rules for object files
 # ==============================
+# -MMD -MP write a .d file next to each object with the headers it includes, so that editing a header rebuilds every
+# object that depends on it (otherwise objects keep a stale class layout)
 $(DEBUG_BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
-	$(CXX) -c $< -o $@ $(DEBUG_FLAGS) $(INCLUDES)
+	$(CXX) -c $< -o $@ -MMD -MP $(DEBUG_FLAGS) $(INCLUDES)
 
 $(RELEASE_BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
-	$(CXX) -c $< -o $@ $(RELEASE_FLAGS) $(INCLUDES)
+	$(CXX) -c $< -o $@ -MMD -MP $(RELEASE_FLAGS) $(INCLUDES)
+
+-include $(DEBUG_OBJS:.o=.d) $(RELEASE_OBJS:.o=.d)
 
 # Simplified library targets
 # ==========================

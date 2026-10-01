@@ -8,7 +8,8 @@ Suites:
                 that clauses are really exchanged (Sharer stats) and that the backbone matches an independent oracle
                 (the standalone CaDiCaL binary, one SAT call per candidate literal)
     robustness  output format, -no-backbone, timeout, repeated runs with many threads (interrupt races),
-                -bb-share-units validation and, with the debug binary, which workers export backbone units
+                -bb-share-units / -bb-share-cand validation and, with the debug binary, which workers export
+                backbone units and which ones consume the candidate board
     mpi         distributed runs with mpirun (not part of 'all', needs -dist support on the machine)
 
 Usage:
@@ -247,6 +248,16 @@ BRUTEFORCE_CONFIGS = [
     ["-c=8", "-shr-sleep=1000", "-init-sleep=100"],
     ["-c=4", "-bb-share-units=0"],
     ["-c=8", "-bb-share-units=10", "-bb-chunk=1", "-shr-sleep=1000", "-init-sleep=100"],
+    ["-c=4", "-bb-share-cand=1"],
+    ["-c=8", "-bb-share-cand=1", "-bb-chunk=1"],
+    ["-c=8", "-bb-share-cand=pc", "-bb-chunk=10", "-bb-share-units=0"],
+    ["-c=4", "-bb-share-cand=1c0", "-bb-no-flip", "-bb-chunk=1"],
+    # variants (s = CadiBackSqrt) and candidate orders; -bb-chunk=0 is the sieve (whole candidates / whole block)
+    ["-c=3", "-solver=cs", "-bb-chunk=1", "-bb-order=natural,random,occ"],
+    ["-c=4", "-solver=s", "-bb-chunk=0", "-bb-order=reverse,occ-rev", "-bb-share-cand=1"],
+    # per-worker chunk rates (-bb-chunk list cycled over the solver ids)
+    ["-c=6", "-solver=cs", "-bb-chunk=0,1,10", "-bb-order=natural,occ,random"],
+    ["-c=4", "-solver=sc", "-bb-chunk=0,2", "-bb-share-cand=1"],
 ]
 
 
@@ -288,6 +299,9 @@ SHARING_CONFIGS = [
     ["-c=8", "-shr-strat=1", "-bb-share-units=0"],
     ["-c=8", "-shr-strat=2", "-bb-share-units=10", "-bb-chunk=1"],
     ["-c=8", "-shr-strat=3", "-bb-share-units=011", "-bb-chunk=10"],
+    ["-c=8", "-shr-strat=1", "-bb-share-cand=1", "-bb-chunk=1"],
+    ["-c=8", "-shr-strat=2", "-bb-share-cand=pc", "-bb-chunk=10", "-bb-share-units=0"],
+    ["-c=8", "-solver=cs", "-bb-chunk=0,1,10,0", "-bb-order=natural,occ", "-bb-share-cand=1"],
 ]
 SHARING_FAST = ["-shr-sleep=10000", "-init-sleep=1000"]
 
@@ -363,7 +377,16 @@ def suite_robustness(opts, report, workdir):
             error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
         report.record(f"-bb-share-units={mask!r} rejected", error, run)
 
+    # -bb-share-cand: same validation, characters 0, 1, p and c
+    for mask in ("", "2", "1x", "P"):
+        run = run_backpainless(opts.binary, demo, [f"-bb-share-cand={mask}"])
+        error = None
+        if run.returncode != PERR_ARGS_ERROR or run.status is not None:
+            error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
+        report.record(f"-bb-share-cand={mask!r} rejected", error, run)
+
     suite_share_units_mask(opts, report, workdir)
+    suite_share_cand_mask(opts, report, workdir)
 
     # timeout on a hard instance: s UNKNOWN, exit 0, in about t seconds
     rng = random.Random(1)
@@ -414,6 +437,41 @@ def suite_share_units_mask(opts, report, workdir):
         print(f"  -bb-share-units={mask:4s} exporters {sorted(exporters)}  {'OK' if error is None else 'FAIL'}",
               flush=True)
         report.record(f"-bb-share-units={mask} honoured", error, run)
+
+
+BOARD_LOG = re.compile(r"CadiBack (\d+) took (?:free variable|backbone literal) (-?\d+) from the board")
+
+
+def suite_share_cand_mask(opts, report, workdir):
+    """With the debug binary (-v=2 logs each candidate taken from the board): only the consumers selected by
+    -bb-share-cand take candidates, nothing is taken without a publisher, and the answer stays right."""
+    if not os.access(DEBUG_BINARY, os.X_OK):
+        print(f"  -bb-share-cand mask check SKIPPED: {DEBUG_BINARY} not built (run make debug)")
+        return
+    n, ratio, seed = SHARING_INSTANCES[1]
+    clauses = planted_kcnf(random.Random(seed), n, int(n * ratio), 3)
+    path = os.path.join(workdir, "share_cand.cnf")
+    write_cnf(path, n, clauses)
+    expected = oracle_backbone(n, clauses, workdir)[1] if os.access(CADICAL, os.X_OK) else None
+    nb_solvers = 8
+    for mask in ("0", "1", "pc", "c", "p", "1000"):
+        run = run_backpainless(DEBUG_BINARY, path, [f"-c={nb_solvers}", "-v=2", f"-bb-share-cand={mask}",
+                                                   "-bb-chunk=1", *SHARING_FAST])
+        consumers = {int(solver) for solver, _ in BOARD_LOG.findall(run.stdout)}
+        allowed = {i for i in range(nb_solvers) if mask[i % len(mask)] in "1c"}
+        has_publisher = any(c in "1p" for c in mask)
+        error = None
+        if run.status != "SATISFIABLE":
+            error = f"status {run.status!r}, exit {run.returncode}"
+        elif expected is not None and sorted(run.backbone, key=abs) != sorted(expected, key=abs):
+            error = "backbone differs from the oracle"
+        elif not consumers <= allowed:
+            error = f"workers {sorted(consumers - allowed)} consumed the board although the mask disables them"
+        elif consumers and not has_publisher:
+            error = "candidates taken from the board although no worker publishes"
+        print(f"  -bb-share-cand={mask:4s} consumers {sorted(consumers)}  {'OK' if error is None else 'FAIL'}",
+              flush=True)
+        report.record(f"-bb-share-cand={mask} honoured", error, run)
 
 
 def suite_mpi(opts, report, workdir):

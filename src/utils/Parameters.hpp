@@ -26,16 +26,30 @@
                                                                                                                        \
 	CATEGORY("Backbone")                                                                                                  \
 	PARAM(backboneChunkRate,                                                                                              \
-		  int,                                                                                                               \
+		  std::string,                                                                                                       \
 		  "bb-chunk",                                                                                                        \
-		  0,                                                                                                                 \
-		  "Chunk rate K of the constraint (0 = all candidates, 1 = one-by-one, 10 = cadiback --chunking)")                   \
+		  "0",                                                                                                               \
+		  "Chunk rate K of the constraint, comma-separated list cycled over the solver ids (0 = all candidates, "            \
+		  "1 = one-by-one, 10 = cadiback --chunking)")                                                                       \
 	PARAM(backboneNoFlip, bool, "bb-no-flip", false, "Do not drop flippable literals from the backbone candidates")       \
 	PARAM(backboneShareUnits,                                                                                             \
 		  std::string,                                                                                                       \
 		  "bb-share-units",                                                                                                  \
 		  "1",                                                                                                               \
 		  "Mask of 0/1 cycled over the solver ids: workers with 1 export their backbone literals as units (10 = even ids)")  \
+	PARAM(backboneShareCandidates,                                                                                        \
+		  std::string,                                                                                                       \
+		  "bb-share-cand",                                                                                                   \
+		  "0",                                                                                                               \
+		  "Mask cycled over the solver ids for the board of decided variables: 0 off, 1 publish and consume, p publish, "    \
+		  "c consume")                                                                                                       \
+	/* NEW ORDER (5/6): add the name to this help and to DETAILED_HELP_BACKBONE below */                                \
+	PARAM(backboneOrder,                                                                                                  \
+		  std::string,                                                                                                       \
+		  "bb-order",                                                                                                        \
+		  "natural",                                                                                                         \
+		  "Initial candidate order, comma-separated list cycled over the solver ids: natural, reverse, random, occ, "        \
+		  "occ-rev")                                                                                                         \
                                                                                                                        \
 	CATEGORY("Portfolio")                                                                                                 \
 	PARAM(solver, std::string, "solver", "c", "Portfolio of backbone solvers")                                            \
@@ -121,6 +135,7 @@ extern Parameters __globalParameters__;
 #define DETAILED_HELP_PORTFOLIO                                                                                        \
 	BLUE "The solver parameter " YELLOW "(-solver=<string>)" BLUE " accepts the following characters:\n" RESET         \
 		 " " BOLD "c" RESET " - CadiBack backbone solver (CaDiCaL)\n"                                                  \
+		 " " BOLD "s" RESET " - CadiBackSqrt: CadiBack applied block by block, sqrt(#candidates) blocks\n"             \
 		 "\n" BLUE "Import Database Types " YELLOW "(-importDB=<char>)" RESET " :\n" DETAILED_HELP_DATABASES "\n"      \
 		 "Working strategy:\n" RESET " " BOLD "Simple Portfolio" RESET                                                 \
 		 ": Run backbone solvers in parallel with diversified configurations, sharing learnt clauses\n"               \
@@ -129,11 +144,22 @@ extern Parameters __globalParameters__;
 
 #define DETAILED_HELP_BACKBONE                                                                                         \
 	BLUE "Backbone extraction (CadiBack algorithm):\n" RESET "  " YELLOW "-bb-chunk" RESET                             \
-		 ": Number of candidates negated in each constraint\n"                                                        \
-		 "    " BOLD "0" RESET ": all remaining candidates (default, as cadiback)\n"                                  \
+		 ": Number of candidates negated in each constraint, one value per worker (comma-separated)\n"               \
+		 "    " BOLD "0" RESET ": always all remaining candidates (default)\n"                                        \
 		 "    " BOLD "1" RESET ": one-by-one\n"                                                                       \
 		 "    " BOLD "K" RESET ": reset to 1 after a SAT answer, multiplied by K after an UNSAT answer\n"             \
+		 "    e.g. " YELLOW "-bb-chunk=0,10" RESET ": even ids use 0, odd ids use 10\n"                                  \
 		 "  " YELLOW "-bb-no-flip" RESET ": Do not use flippable literals to drop candidates\n"                       \
+		 "  " YELLOW "-bb-share-cand" RESET ": Board of decided variables (backbone or free), one mode per worker\n"   \
+		 "    " BOLD "0" RESET ": off (default)   " BOLD "1" RESET ": publish and consume\n"                            \
+		 "    " BOLD "p" RESET ": publish only    " BOLD "c" RESET ": consume only\n"                                   \
+		 "    The mask is cycled over the solver ids, e.g. " YELLOW "-bb-share-cand=1c" RESET                            \
+		 ": even ids publish and consume, odd ids only consume\n"                                                     \
+		 "  " YELLOW "-bb-order" RESET ": Order of the initial candidates, one name per worker (comma-separated)\n"     \
+		 "    " BOLD "natural" RESET ": variable index (default)   " BOLD "reverse" RESET ": decreasing index\n"       \
+		 "    " BOLD "random" RESET ": shuffled with the solver seed\n"                                                \
+		 "    " BOLD "occ" RESET " / " BOLD "occ-rev" RESET                                                              \
+		 ": most / least frequent candidate literals in the formula first\n"                                         \
 		 "\n" BLUE "Output:\n" RESET "  'b <lit>' lines followed by 'b 0' (disable with " YELLOW "-no-backbone" RESET \
 		 ")\n"
 
