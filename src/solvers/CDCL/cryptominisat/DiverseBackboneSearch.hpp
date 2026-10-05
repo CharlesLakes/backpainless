@@ -87,8 +87,9 @@ class DiverseBackboneSearch : public BackboneSolverInterface
 	/* Search */
 
 	/// @brief One round of XOR exploration over the variables of @p candidates. COMPLETE when the round is over,
-	/// UNSAT when the formula is unsatisfiable, UNKNOWN when interrupted.
-	BackboneResult exploreRound(std::vector<int>& candidates);
+	/// UNSAT when the formula is unsatisfiable, UNKNOWN when interrupted. Sets @p abandoned when the patience ran out
+	/// (-bb-xor-patience) and @p found to the number of free variables found by the round.
+	BackboneResult exploreRound(std::vector<int>& candidates, bool& abandoned, unsigned long& found);
 
 	/// @brief CadiBack loop on the remaining candidates (step 3). COMPLETE, or UNKNOWN when interrupted.
 	BackboneResult completeBackbone(std::vector<int>& candidates);
@@ -150,6 +151,11 @@ class DiverseBackboneSearch : public BackboneSolverInterface
 
 	/// @brief Conflict budget of a DFS node, from -bb-xor-confl and the conflicts of the first model (0: no limit).
 	unsigned long m_nodeBudget = 0;
+
+	/// @brief Conflicts without a new free variable before a round is abandoned (-bb-xor-patience, 0: never).
+	unsigned long m_patience = 0;
+
+	unsigned long m_xorAbandoned = 0; ///< rounds abandoned by the patience
 
 	std::mt19937_64 m_rng;
 

@@ -280,6 +280,9 @@ BRUTEFORCE_CONFIGS = [
     ["-c=8", "-solver=ccccsssc", "-bb-chunk=0,0,10,10,0,0,10,1", "-bb-xor-pre=00000001", "-bb-share-cand=1"],
     ["-c=4", "-solver=x", "-bb-xor-dfs=adaptive,leaves", "-bb-xor-m=64,3", "-bb-xor-confl=50,0",
      "-bb-xor-rounds=2", "-bb-share-cand=1"],
+    # patience of the exploration (-bb-xor-patience): abandon a round without new free variables, restart if useful
+    ["-c=2", "-bb-xor-pre=1", "-bb-xor-patience=1000,0", "-bb-xor-rounds=3"],
+    ["-c=2", "-solver=xc", "-bb-xor-pre=1", "-bb-xor-patience=1x,1000", "-bb-xor-rounds=4", "-bb-share-cand=1"],
 ]
 
 

@@ -6,6 +6,7 @@
 #include "cadical/src/cadical.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -151,7 +152,9 @@ class CadiBackBase
 	/// literal that is assumed during the round and fixed to false after it, so CadiBack then runs on the formula.
 	BackboneResult xorPrePhase(std::vector<int>& candidates);
 
-	BackboneResult xorRound(std::vector<int>& candidates);
+	/// @brief One round: draws the XORs and runs the DFS. Sets @p abandoned when the patience ran out (-bb-xor-patience)
+	/// and @p found to the number of free variables found by the round.
+	BackboneResult xorRound(std::vector<int>& candidates, bool& abandoned, unsigned long& found);
 
 	/// @brief Adds lits[0] ^ ... ^ lits[n-1] = 0 guarded by @p guard: a chain of 4-literal XORs (8 clauses each).
 	void addXorChain(const std::vector<int>& lits, int guard);
@@ -164,9 +167,17 @@ class CadiBackBase
 	std::mt19937_64 m_xorRng;
 	int m_lastVariable = 0;
 	unsigned long m_xorBudget = 0;
+	unsigned long m_xorPatience = 0; ///< conflicts without a new free variable before a round is abandoned (0: never)
+	unsigned long m_xorAbandoned = 0; ///< rounds abandoned by the patience
 	XorDfsStats m_xorDfs;
 	unsigned long m_xorRounds = 0, m_xorsAdded = 0, m_xorsDependent = 0, m_xorClauses = 0, m_freeByXor = 0;
 	double m_xorSeconds = 0;
+	/// @brief Start of the running exploration (the statistics can be printed while it runs, when another worker wins)
+	std::chrono::steady_clock::time_point m_xorStart;
+	std::atomic<bool> m_xorRunning{ false }; /* read by the statistics, possibly from another thread */
+
+	/// @brief Seconds spent in the XOR exploration, including the running one.
+	double xorSeconds() const;
 
 	/// @brief Sets @ref cadicalOptions to the default configuration and applies it.
 	void initCadicalOptions();

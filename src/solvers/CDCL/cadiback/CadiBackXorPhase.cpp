@@ -13,15 +13,15 @@
 BackboneResult
 CadiBackBase::xorPrePhase(std::vector<int>& candidates)
 {
-	auto start = std::chrono::steady_clock::now();
+	m_xorStart = std::chrono::steady_clock::now();
+	m_xorRunning = true;
 	m_xorRng.seed(m_seed);
 	m_lastVariable = std::max<int>(m_nbVars, solver->vars());
 
-	/* A relative budget follows the hardness of the instance: the first model took the conflicts done so far */
-	const XorBudget& budget = m_xorOptions.budget;
-	m_xorBudget = (budget.factor > 0.0)
-					  ? std::max<unsigned long>(MIN_XOR_BUDGET, budget.factor * solver->getStatistics()->conflicts)
-					  : budget.conflicts;
+	/* Relative budgets follow the hardness of the instance: the first model took the conflicts done so far */
+	const unsigned long firstModel = solver->getStatistics()->conflicts;
+	m_xorBudget = xorBudgetConflicts(m_xorOptions.budget, firstModel);
+	m_xorPatience = xorBudgetConflicts(m_xorOptions.patience, firstModel);
 
 	BackboneResult result = BackboneResult::COMPLETE;
 	for (unsigned long round = 0; round < m_xorOptions.rounds && !candidates.empty(); round++) {
@@ -33,12 +33,19 @@ CadiBackBase::xorPrePhase(std::vector<int>& candidates)
 		extractFixed(candidates);
 		if (candidates.empty())
 			break;
-		result = xorRound(candidates);
+		bool abandoned = false;
+		unsigned long found = 0;
+		result = xorRound(candidates, abandoned, found);
 		if (result != BackboneResult::COMPLETE)
+			break;
+		/* Out of patience: a round that found nothing means the XORs do not pay on this instance, stop exploring;
+		 * otherwise restart with new XORs over the remaining candidates */
+		if (abandoned && found == 0)
 			break;
 	}
 
-	m_xorSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+	m_xorSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - m_xorStart).count();
+	m_xorRunning = false;
 	LOG1("%s %d: XOR exploration done in %.2f s, %lu free variables found, %zu candidates left",
 		 variantName(),
 		 this->getSolverId(),
@@ -48,8 +55,16 @@ CadiBackBase::xorPrePhase(std::vector<int>& candidates)
 	return result;
 }
 
+double
+CadiBackBase::xorSeconds() const
+{
+	double running =
+		m_xorRunning ? std::chrono::duration<double>(std::chrono::steady_clock::now() - m_xorStart).count() : 0.0;
+	return m_xorSeconds + running;
+}
+
 BackboneResult
-CadiBackBase::xorRound(std::vector<int>& candidates)
+CadiBackBase::xorRound(std::vector<int>& candidates, bool& abandoned, unsigned long& found)
 {
 	std::vector<int> pool;
 	pool.reserve(candidates.size());
@@ -78,16 +93,32 @@ CadiBackBase::xorRound(std::vector<int>& candidates)
 	m_xorRounds++;
 	m_xorsAdded += m;
 
+	/* Patience: conflicts since the last new free variable (or the start of the round) */
+	auto conflicts = [this]() -> unsigned long { return solver->getStatistics()->conflicts; };
+	unsigned long lastProgress = conflicts();
+
 	bool formulaUnsat = false;
 	auto solveNode = [&](unsigned int depth, uint64_t mask) -> XorNodeResult {
 		if (stopSolver || candidates.empty())
 			return { XorNodeAnswer::STOP };
 
+		/* A node never runs past the patience left */
+		unsigned long budget = m_xorBudget;
+		if (m_xorPatience) {
+			unsigned long spent = conflicts() - lastProgress;
+			if (spent >= m_xorPatience) {
+				abandoned = true;
+				return { XorNodeAnswer::STOP };
+			}
+			unsigned long left = m_xorPatience - spent;
+			budget = budget ? std::min(budget, left) : left;
+		}
+
 		solver->assume(guard);
 		for (unsigned int j = 0; j < depth; j++)
 			solver->assume(xorRhs(mask, m, j) ? selectors[j] : -selectors[j]);
-		if (m_xorBudget)
-			solver->limit("conflicts", (int)std::min<unsigned long>(m_xorBudget, INT_MAX));
+		if (budget)
+			solver->limit("conflicts", (int)std::min<unsigned long>(budget, INT_MAX));
 		m_satCalls++;
 		int res = solver->solve();
 
@@ -95,6 +126,10 @@ CadiBackBase::xorRound(std::vector<int>& candidates)
 			m_satAnswers++;
 			size_t before = candidates.size();
 			filterWithModel(candidates);
+			if (candidates.size() < before) {
+				found += before - candidates.size();
+				lastProgress = conflicts();
+			}
 			m_freeByXor += before - candidates.size();
 			return { XorNodeAnswer::SAT };
 		}
@@ -122,6 +157,9 @@ CadiBackBase::xorRound(std::vector<int>& candidates)
 	solver->melt(guard);
 	for (int selector : selectors)
 		solver->melt(selector);
+
+	if (abandoned)
+		m_xorAbandoned++;
 
 	if (formulaUnsat) {
 		LOGSTAT("%s %d: formula is UNSATISFIABLE", variantName(), this->getSolverId());

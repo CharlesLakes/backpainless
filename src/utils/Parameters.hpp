@@ -67,6 +67,12 @@
 		  "bb-xor-rounds",                                                                                                   \
 		  "1",                                                                                                               \
 		  "Rounds of XOR exploration (new XORs each round) before completing the backbone")                                \
+	PARAM(backboneXorPatience,                                                                                            \
+		  std::string,                                                                                                       \
+		  "bb-xor-patience",                                                                                                 \
+		  "4x",                                                                                                              \
+		  "Conflicts without a new free variable after which a round is abandoned (a new one is drawn if it found "         \
+		  "something, else the exploration ends): '<f>x' = f times the first model, an integer = absolute, 0 = never")      \
 	PARAM(backboneXorLeaves,                                                                                              \
 		  std::string,                                                                                                       \
 		  "bb-xor-leaves",                                                                                                   \
@@ -215,6 +221,8 @@ extern Parameters __globalParameters__;
 		 " integer: fixed length\n"                                                                                   \
 		 "  " YELLOW "-bb-xor-leaves" RESET ": nodes per round (0 = no limit)   " YELLOW "-bb-xor-confl" RESET           \
 		 ": conflicts per node, " BOLD "2x" RESET " (default) twice the first model, or absolute\n"                                                                       \
+		 "  " YELLOW "-bb-xor-patience" RESET ": " BOLD "4x" RESET " (default) conflicts without a new free variable"    \
+		 " before the round is abandoned:\n    a new round is drawn if it found something, else the exploration ends\n"   \
 		 "  " YELLOW "-bb-xor-dfs" RESET ": " BOLD "adaptive" RESET                                                      \
 		 " (default) solves the inner nodes with the first d XORs: SAT goes down, UNSAT prunes, an\n"                    \
 		 "    exhausted budget skips the subtree;  " BOLD "leaves" RESET ": solves the 2^m leaves only\n"                \

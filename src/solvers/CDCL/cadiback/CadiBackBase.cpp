@@ -657,13 +657,15 @@ CadiBackBase::printStatistics()
 	if (m_xorOptions.pre)
 		std::cout << "c|   xor, solver " << this->getSolverId() << " (" << variantName() << " -bb-xor-pre, m="
 				  << m_xorOptions.count << " " << xorDensityName(m_xorOptions.density) << ", budget "
-				  << xorBudgetName(m_xorOptions.budget) << " = " << m_xorBudget << "): " << m_xorRounds << " rounds, "
+				  << xorBudgetName(m_xorOptions.budget) << " = " << m_xorBudget << ", patience "
+				  << xorBudgetName(m_xorOptions.patience) << " = " << m_xorPatience << "): " << m_xorRounds << " rounds ("
+				  << m_xorAbandoned << " abandoned), "
 				  << m_xorsAdded << " XORs (" << m_xorsDependent << " dependent drawn), "
 				  << (m_xorOptions.adaptive ? "adaptive" : "leaves") << " DFS, nodes " << m_xorDfs.sat << " SAT / "
 				  << m_xorDfs.unsat << " UNSAT / " << m_xorDfs.unknown << " unknown, " << m_xorDfs.pruned
 				  << " leaves pruned, mean SAT depth " << (m_xorDfs.sat ? (double)m_xorDfs.depthSum / m_xorDfs.sat : 0.0)
-				  << ", " << m_freeByXor << " free found by XORs, " << m_xorClauses << " clauses, " << m_xorSeconds
-				  << " s\n";
+				  << ", " << m_freeByXor << " free found by XORs, " << m_xorClauses << " clauses, " << xorSeconds()
+				  << " s" << (m_xorRunning ? " (still exploring)" : "") << "\n";
 	if (m_publishCandidates || m_consumeCandidates)
 		std::cout << "c|   board, solver " << this->getSolverId() << " (" << variantName() << ", order "
 				  << candidateOrderName(m_candidateOrder) << ", chunk " << m_chunkRate << "): published first "
@@ -699,5 +701,5 @@ CadiBackBase::printWinningLog()
 				m_xorDfs.unsat,
 				m_xorDfs.unknown,
 				m_freeByXor,
-				m_xorSeconds);
+				xorSeconds());
 }

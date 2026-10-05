@@ -19,6 +19,7 @@ XorOptionLists::forSolver(unsigned int id) const
 	options.exportLearnt = exportMask[id % exportMask.size()] == '1';
 	options.pre = preMask[id % preMask.size()] == '1';
 	options.budget = budgets[id % budgets.size()];
+	options.patience = patiences[id % patiences.size()];
 	return options;
 }
 
@@ -77,6 +78,14 @@ parseXorBudgetList(const std::string& list, std::vector<XorBudget>& budgets)
 		budgets.push_back(budget);
 	}
 	return !budgets.empty() && budgets.size() == fields;
+}
+
+unsigned long
+xorBudgetConflicts(const XorBudget& budget, unsigned long firstModelConflicts)
+{
+	if (budget.factor > 0.0)
+		return std::max<unsigned long>(MIN_XOR_BUDGET, budget.factor * firstModelConflicts);
+	return budget.conflicts;
 }
 
 std::string
@@ -154,6 +163,12 @@ parseXorOptionLists(XorOptionLists& lists, std::string& error)
 				": expected a comma-separated list of probabilities in (0,1] (with a '.') or integers >= 1";
 		return false;
 	}
+	if (!parseXorBudgetList(__globalParameters__.backboneXorPatience, lists.patiences)) {
+		error = "Invalid -bb-xor-patience=" + __globalParameters__.backboneXorPatience +
+				": expected a comma-separated list of integers (0 = never) or factors '<f>x' (e.g. 4x)";
+		return false;
+	}
+
 	lists.exportMask = __globalParameters__.backboneXorExport;
 	if (lists.exportMask.empty() || lists.exportMask.find_first_not_of("01") != std::string::npos) {
 		error = "Invalid -bb-xor-export=" + lists.exportMask + ": expected a non empty mask of 0 and 1";

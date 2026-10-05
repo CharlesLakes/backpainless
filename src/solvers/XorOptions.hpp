@@ -22,6 +22,9 @@ struct XorBudget
 	double factor = 2.0;		 ///< > 0: factor times the conflicts of the first solve call (at least MIN_XOR_BUDGET)
 };
 
+/// @brief Conflicts of a relative budget (factor > 0, at least MIN_XOR_BUDGET) or the absolute one.
+unsigned long xorBudgetConflicts(const XorBudget& budget, unsigned long firstModelConflicts);
+
 /// @brief Smallest relative budget (an easy first model takes almost no conflict).
 constexpr unsigned long MIN_XOR_BUDGET = 1000;
 
@@ -36,6 +39,7 @@ struct XorOptions
 	bool pre = false;				///< c, s: run the XOR exploration before CadiBack
 	unsigned long leaves = 0;		///< nodes solved per round (0: no limit)
 	XorBudget budget;				///< conflict budget of a DFS node
+	XorBudget patience{ 0, 4.0 };	///< conflicts without a new free variable before a round is abandoned
 };
 
 /// @brief Parsed -bb-xor-* lists, each one cycled over the solver ids independently (as the other -bb-* lists).
@@ -49,6 +53,7 @@ struct XorOptionLists
 	std::string exportMask;
 	std::string preMask;
 	std::vector<XorBudget> budgets;
+	std::vector<XorBudget> patiences;
 
 	/// @brief Options of the solver with global id @p id.
 	XorOptions forSolver(unsigned int id) const;

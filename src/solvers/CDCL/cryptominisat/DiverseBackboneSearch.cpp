@@ -115,10 +115,9 @@ DiverseBackboneSearch::solve(const std::vector<int>& cube)
 
 	/* A relative budget follows the hardness of the instance: a node with fewer constraints than the first call can
 	 * still need as many conflicts to find a model */
-	const XorBudget& budget = m_xorOptions.budget;
-	m_nodeBudget = (budget.factor > 0.0)
-					   ? std::max<unsigned long>(MIN_XOR_BUDGET, budget.factor * m_solver->get_sum_conflicts())
-					   : budget.conflicts;
+	const unsigned long firstModel = m_solver->get_sum_conflicts();
+	m_nodeBudget = xorBudgetConflicts(m_xorOptions.budget, firstModel);
+	m_patience = xorBudgetConflicts(m_xorOptions.patience, firstModel);
 
 	/* The candidates are the literals of the first model, filterWithModel drops the flippable ones */
 	std::vector<int> candidates;
@@ -147,9 +146,14 @@ DiverseBackboneSearch::solve(const std::vector<int>& cube)
 		extractFixed(candidates);
 		if (candidates.empty())
 			break;
-		BackboneResult result = exploreRound(candidates);
+		bool abandoned = false;
+		unsigned long found = 0;
+		BackboneResult result = exploreRound(candidates, abandoned, found);
 		if (result != BackboneResult::COMPLETE)
 			return result;
+		/* Out of patience: stop exploring if the round found nothing, else restart with new XORs */
+		if (abandoned && found == 0)
+			break;
 	}
 
 	/* Completion: the CadiBack loop on the remaining candidates */
@@ -169,7 +173,7 @@ DiverseBackboneSearch::solve(const std::vector<int>& cube)
 }
 
 BackboneResult
-DiverseBackboneSearch::exploreRound(std::vector<int>& candidates)
+DiverseBackboneSearch::exploreRound(std::vector<int>& candidates, bool& abandoned, unsigned long& found)
 {
 	std::vector<int> pool;
 	pool.reserve(candidates.size());
@@ -207,18 +211,37 @@ DiverseBackboneSearch::exploreRound(std::vector<int>& candidates)
 	bool formulaUnsat = false;
 	std::vector<CMSat::Lit> assumptions;
 	assumptions.reserve(m);
+	/* Patience: conflicts since the last new free variable (or the start of the round) */
+	unsigned long lastProgress = m_solver->get_sum_conflicts();
 	auto solveNode = [&](unsigned int depth, uint64_t mask) -> XorNodeResult {
 		if (m_stop || candidates.empty())
 			return { XorNodeAnswer::STOP };
+
+		/* A node never runs past the patience left */
+		unsigned long budget = m_nodeBudget;
+		if (m_patience) {
+			unsigned long spent = m_solver->get_sum_conflicts() - lastProgress;
+			if (spent >= m_patience) {
+				abandoned = true;
+				return { XorNodeAnswer::STOP };
+			}
+			unsigned long left = m_patience - spent;
+			budget = budget ? std::min(budget, left) : left;
+		}
+
 		assumptions.clear();
 		for (unsigned int j = 0; j < depth; j++)
 			assumptions.push_back(CMSat::Lit(selectors[j], !xorRhs(mask, m, j)));
 
-		int res = solveWith(assumptions, m_nodeBudget);
+		int res = solveWith(assumptions, budget);
 		if (res == 10) {
 			m_satAnswers++;
 			const unsigned long freeBeforeNode = m_freeVariables;
 			filterWithModel(candidates);
+			if (m_freeVariables > freeBeforeNode) {
+				found += m_freeVariables - freeBeforeNode;
+				lastProgress = m_solver->get_sum_conflicts();
+			}
 			m_freeByXor += m_freeVariables - freeBeforeNode;
 			return { XorNodeAnswer::SAT };
 		}
@@ -241,6 +264,8 @@ DiverseBackboneSearch::exploreRound(std::vector<int>& candidates)
 		return { m_stop ? XorNodeAnswer::STOP : XorNodeAnswer::UNKNOWN };
 	};
 	xorDfs(m, m_xorOptions.adaptive, m_xorOptions.leaves, solveNode, m_dfsStats);
+	if (abandoned)
+		m_xorAbandoned++;
 
 	if (formulaUnsat) {
 		LOGSTAT("DiverseBackboneSearch %d: formula is UNSATISFIABLE", this->getSolverId());
@@ -684,7 +709,8 @@ DiverseBackboneSearch::printStatistics()
 	/* Printed under the logger lock taken by BackboneSolverFactory::printStats, so std::cout and not LOGSTAT */
 	std::cout << "c|   xor, solver " << this->getSolverId() << " (m=" << m_xorOptions.count << " "
 			  << xorDensityName(m_xorOptions.density) << ", budget " << xorBudgetName(m_xorOptions.budget) << " = "
-			  << m_nodeBudget << "): " << m_xorRounds << " rounds, " << m_xorsAdded
+			  << m_nodeBudget << ", patience " << xorBudgetName(m_xorOptions.patience) << " = " << m_patience << "): "
+			  << m_xorRounds << " rounds (" << m_xorAbandoned << " abandoned), " << m_xorsAdded
 			  << " XORs (" << m_xorsDependent << " dependent drawn), " << (m_xorOptions.adaptive ? "adaptive" : "leaves")
 			  << " DFS, nodes " << m_dfsStats.sat << " SAT / " << m_dfsStats.unsat << " UNSAT / "
 			  << m_dfsStats.unknown << " unknown, " << m_dfsStats.pruned << " leaves pruned, mean SAT depth "
