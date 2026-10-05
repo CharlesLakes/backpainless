@@ -263,6 +263,23 @@ BRUTEFORCE_CONFIGS = [
     ["-c=1", "-solver=s", "-bb-chunk=1000000000"],
     ["-c=8", "-solver=ccccsssc", "-bb-chunk=0,0,10,10,0,0,10,1000000000",
      "-bb-order=natural,random,occ,random,occ,natural,occ,occ", "-bb-share-cand=1"],
+    # x = DiverseBackboneSearch (random XOR exploration on CryptoMiniSat, then the CadiBack loop)
+    ["-c=1", "-solver=x"],
+    ["-c=1", "-solver=x", "-bb-no-flip", "-bb-xor-m=1"],
+    ["-c=1", "-solver=x", "-bb-chunk=1", "-bb-xor-m=64", "-bb-xor-leaves=50"],
+    ["-c=2", "-solver=x", "-bb-xor-density=3,0.2", "-bb-xor-rounds=3", "-bb-xor-confl=0", "-bb-chunk=10"],
+    ["-c=4", "-solver=cx", "-bb-share-cand=1", "-bb-chunk=0,10"],
+    ["-c=6", "-solver=xcs", "-bb-xor-m=5,64", "-bb-xor-density=0.5,1,2", "-bb-order=random,occ",
+     "-bb-share-cand=1c", "-bb-share-units=10"],
+    ["-c=1", "-solver=x", "-bb-xor-dfs=leaves", "-bb-xor-export=1"],
+    # XOR exploration before CadiBack on CaDiCaL workers (-bb-xor-pre)
+    ["-c=1", "-bb-xor-pre=1"],
+    ["-c=1", "-bb-xor-pre=1", "-bb-xor-dfs=leaves", "-bb-chunk=1", "-bb-no-flip"],
+    ["-c=4", "-solver=cs", "-bb-xor-pre=1", "-bb-xor-m=64,2", "-bb-xor-density=0.5,3", "-bb-xor-confl=50,0",
+     "-bb-xor-rounds=3", "-bb-share-cand=1"],
+    ["-c=8", "-solver=ccccsssc", "-bb-chunk=0,0,10,10,0,0,10,1", "-bb-xor-pre=00000001", "-bb-share-cand=1"],
+    ["-c=4", "-solver=x", "-bb-xor-dfs=adaptive,leaves", "-bb-xor-m=64,3", "-bb-xor-confl=50,0",
+     "-bb-xor-rounds=2", "-bb-share-cand=1"],
 ]
 
 
@@ -309,6 +326,11 @@ SHARING_CONFIGS = [
     ["-c=8", "-solver=cs", "-bb-chunk=0,1,10,0", "-bb-order=natural,occ", "-bb-share-cand=1"],
     ["-c=8", "-shr-strat=1", "-bb-chunk=1000000000"],
     ["-c=8", "-solver=cs", "-bb-chunk=0,1000000000", "-bb-share-cand=1"],
+    ["-c=8", "-solver=x", "-bb-xor-m=12", "-bb-xor-leaves=200", "-bb-xor-dfs=adaptive,leaves", "-bb-xor-export=10"],
+    ["-c=8", "-solver=cx", "-bb-share-cand=1", "-bb-xor-density=0.5,8"],
+    ["-c=8", "-solver=ccccsssx", "-bb-share-cand=1", "-bb-xor-export=1"],
+    ["-c=8", "-solver=ccccsssc", "-bb-chunk=0,0,10,10,0,0,10,1", "-bb-xor-pre=00000001", "-bb-share-cand=1"],
+    ["-c=8", "-bb-xor-pre=1", "-bb-xor-m=12", "-bb-xor-dfs=adaptive,leaves"],
 ]
 SHARING_FAST = ["-shr-sleep=10000", "-init-sleep=1000"]
 

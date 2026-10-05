@@ -1,6 +1,7 @@
 #pragma once
 
 #include "solvers/BackboneSolverInterface.hpp"
+#include "solvers/XorSampler.hpp"
 
 #include "cadical/src/cadical.hpp"
 
@@ -22,7 +23,7 @@
  *    SAT: drop the candidates falsified or flippable in the new model. UNSAT: the whole chunk is backbone.
  *
  * The loop of solve() is fixed; variants of the search derive from this class (one file per variant in this
- * directory) and override the protected hooks: initCandidates, selectChunk, onSat, onUnsat. The defaults implement
+ * directory) and override the protected hooks: initCandidates, explore, selectChunk, onSat, onUnsat. The defaults implement
  * the algorithm of the paper, see CadiBack for the baseline. A variant must keep the invariants documented on each
  * hook, since what a solver exports (learnt clauses, backbone units) must stay implied by the formula alone.
  *
@@ -89,6 +90,15 @@ class CadiBackBase
 	/// @details May reorder (any order is sound) and set up the state of the variant, but every candidate must stay.
 	virtual void initCandidates(std::vector<int>& candidates);
 
+	/// @brief Called once after initCandidates, before the chunk loop. Default: the XOR exploration when -bb-xor-pre
+	/// enables it for this worker (see xorPrePhase), otherwise nothing (COMPLETE).
+	/// @details Returns COMPLETE to go on with the chunk loop, UNSAT if the formula is unsatisfiable, UNKNOWN when
+	/// interrupted. May only drop candidates refuted by models of the formula (filterWithModel) and move fixed ones
+	/// (extractFixed). Anything it adds to CaDiCaL must be a conservative extension: fresh variables (index above
+	/// @ref m_nbVars) defined by the formula or guarded by a literal that is later fixed, so that the backbone stays
+	/// the one of the formula; the Learner never exports a clause with such a variable.
+	virtual BackboneResult explore(std::vector<int>& candidates);
+
 	/// @brief Fills @p chunk (given empty) with the candidates whose negations form the next constraint. Default: the
 	/// first min(@ref m_chunkSize, |candidates|) ones.
 	/// @details @p candidates is not empty and has no fixed literal. The chunk must be a non-empty subset of it.
@@ -119,6 +129,11 @@ class CadiBackBase
 	/// @brief Removes the literals of @p lits from @p candidates, keeping the order of the others.
 	void removeCandidates(std::vector<int>& candidates, const std::vector<int>& lits);
 
+	/// @brief With -bb-share-cand consume: drops the candidates whose variable another solver published as free and
+	/// moves the ones it published as backbone to @ref m_backbone (also added to CaDiCaL as units). Called by the loop
+	/// of solve() before each chunk, so every variant benefits from it.
+	void syncWithBoard(std::vector<int>& candidates);
+
 	/// @brief Size of the next chunk for the default selectChunk (SIZE_MAX when the chunk holds all candidates).
 	size_t m_chunkSize = 0;
 
@@ -129,6 +144,30 @@ class CadiBackBase
 	unsigned int m_seed = 0;
 
   private:
+	/* XOR exploration before CadiBack (-bb-xor-pre), CadiBackXorPhase.cpp */
+
+	/// @brief Rounds of the XOR exploration of DiverseBackboneSearch, on CaDiCaL: each XOR in CNF (chain of 4-literal
+	/// XORs with fresh variables) defines a fresh selector, every clause of the round is guarded by a fresh round
+	/// literal that is assumed during the round and fixed to false after it, so CadiBack then runs on the formula.
+	BackboneResult xorPrePhase(std::vector<int>& candidates);
+
+	BackboneResult xorRound(std::vector<int>& candidates);
+
+	/// @brief Adds lits[0] ^ ... ^ lits[n-1] = 0 guarded by @p guard: a chain of 4-literal XORs (8 clauses each).
+	void addXorChain(const std::vector<int>& lits, int guard);
+
+	/// @brief Adds the 2^(n-1) clauses of lits[0] ^ ... ^ lits[n-1] = 0 (n <= 4), each with -guard.
+	void addSmallXor(const int* lits, unsigned int n, int guard);
+
+	int newVariable() { return ++m_lastVariable; }
+
+	std::mt19937_64 m_xorRng;
+	int m_lastVariable = 0;
+	unsigned long m_xorBudget = 0;
+	XorDfsStats m_xorDfs;
+	unsigned long m_xorRounds = 0, m_xorsAdded = 0, m_xorsDependent = 0, m_xorClauses = 0, m_freeByXor = 0;
+	double m_xorSeconds = 0;
+
 	/// @brief Sets @ref cadicalOptions to the default configuration and applies it.
 	void initCadicalOptions();
 
@@ -145,11 +184,6 @@ class CadiBackBase
 	/// @brief Records that the variable of @p lit is free (both values appear in models): publishes it on the
 	/// candidate board (only if enabled for this worker by -bb-share-cand).
 	void addFreeVariable(int lit);
-
-	/// @brief With -bb-share-cand consume: drops the candidates whose variable another solver published as free and
-	/// moves the ones it published as backbone to @ref m_backbone (also added to CaDiCaL as units). Called by the loop
-	/// of solve() before each chunk, so every variant benefits from it.
-	void syncWithBoard(std::vector<int>& candidates);
 
   protected:
 	std::unique_ptr<CaDiCaL::Solver> solver;

@@ -36,6 +36,13 @@ CadiBackBase::learn(int lit)
 		tempClause.push_back(lit);
 	else {
 		assert(tempClause.size() > 0 && this->lbd >= 0);
+		/* A clause with a fresh variable of a variant (explore) is not a consequence of the formula alone */
+		if (std::any_of(tempClause.begin(), tempClause.end(), [this](int l) {
+				return (unsigned int)std::abs(l) > m_nbVars;
+			})) {
+			tempClause.clear();
+			return;
+		}
 		auto exportedClause = ClauseExchange::create(tempClause, this->lbd, this->getSharingId());
 
 		assert(tempClause.size() == exportedClause->size);
@@ -163,6 +170,11 @@ CadiBackBase::solve(const std::vector<int>& cube)
 		 m_nbVars,
 		 candidateOrderName(m_candidateOrder));
 
+	/* Exploration of a variant (default: nothing) */
+	BackboneResult explored = explore(candidates);
+	if (explored != BackboneResult::COMPLETE)
+		return explored;
+
 	/* K = 0: the constraint always holds all remaining candidates (the default K = infinity of the paper and cadiback.cpp
 	 * also resets to 1 after a SAT answer, as a large K does here). K > 0: as the paper, the size is reset to 1 after a
 	 * SAT answer and multiplied by K after an UNSAT answer (K = 1: one-by-one, K = 10: cadiback --chunking) */
@@ -220,6 +232,12 @@ void
 CadiBackBase::initCandidates(std::vector<int>& /* candidates */)
 {
 	/* The order is the one of -bb-order (natural by default, as cadiback.cpp) */
+}
+
+BackboneResult
+CadiBackBase::explore(std::vector<int>& candidates)
+{
+	return m_xorOptions.pre ? xorPrePhase(candidates) : BackboneResult::COMPLETE;
 }
 
 void
@@ -636,6 +654,16 @@ CadiBackBase::printStatistics()
 			  << std::setw(20) << "|"
 			  << "\n";
 	/* Printed under the logger lock taken by BackboneSolverFactory::printStats, so std::cout and not LOGSTAT */
+	if (m_xorOptions.pre)
+		std::cout << "c|   xor, solver " << this->getSolverId() << " (" << variantName() << " -bb-xor-pre, m="
+				  << m_xorOptions.count << " " << xorDensityName(m_xorOptions.density) << ", budget "
+				  << xorBudgetName(m_xorOptions.budget) << " = " << m_xorBudget << "): " << m_xorRounds << " rounds, "
+				  << m_xorsAdded << " XORs (" << m_xorsDependent << " dependent drawn), "
+				  << (m_xorOptions.adaptive ? "adaptive" : "leaves") << " DFS, nodes " << m_xorDfs.sat << " SAT / "
+				  << m_xorDfs.unsat << " UNSAT / " << m_xorDfs.unknown << " unknown, " << m_xorDfs.pruned
+				  << " leaves pruned, mean SAT depth " << (m_xorDfs.sat ? (double)m_xorDfs.depthSum / m_xorDfs.sat : 0.0)
+				  << ", " << m_freeByXor << " free found by XORs, " << m_xorClauses << " clauses, " << m_xorSeconds
+				  << " s\n";
 	if (m_publishCandidates || m_consumeCandidates)
 		std::cout << "c|   board, solver " << this->getSolverId() << " (" << variantName() << ", order "
 				  << candidateOrderName(m_candidateOrder) << ", chunk " << m_chunkRate << "): published first "
@@ -663,4 +691,13 @@ CadiBackBase::printWinningLog()
 		LOGSTAT("From the candidate board: %lu free variables dropped, %lu backbone literals taken",
 				m_boardFree,
 				m_boardBackbone);
+	if (m_xorOptions.pre)
+		LOGSTAT("XOR exploration (-bb-xor-pre): %lu rounds, %lu SAT / %lu UNSAT / %lu unknown nodes, %lu free variables "
+				"found, %.2f s",
+				m_xorRounds,
+				m_xorDfs.sat,
+				m_xorDfs.unsat,
+				m_xorDfs.unknown,
+				m_freeByXor,
+				m_xorSeconds);
 }

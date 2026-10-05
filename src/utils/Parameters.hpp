@@ -50,6 +50,51 @@
 		  "natural",                                                                                                         \
 		  "Initial candidate order, comma-separated list cycled over the solver ids: natural, reverse, random, occ, "        \
 		  "occ-rev")                                                                                                         \
+	/* DiverseBackboneSearch (-solver=x): every option is a comma-separated list cycled over the solver ids */          \
+	PARAM(backboneXorCount,                                                                                               \
+		  std::string,                                                                                                       \
+		  "bb-xor-m",                                                                                                        \
+		  "10",                                                                                                              \
+		  "Number m of random XOR constraints per round (1 to 64), the DFS tree has 2^m leaves")                            \
+	PARAM(backboneXorDensity,                                                                                             \
+		  std::string,                                                                                                       \
+		  "bb-xor-density",                                                                                                  \
+		  "0.5",                                                                                                             \
+		  "Variables of each XOR: a probability in (0,1] (with a '.') per candidate variable, or an integer k >= 1 for a "  \
+		  "fixed length")                                                                                                    \
+	PARAM(backboneXorRounds,                                                                                              \
+		  std::string,                                                                                                       \
+		  "bb-xor-rounds",                                                                                                   \
+		  "1",                                                                                                               \
+		  "Rounds of XOR exploration (new XORs each round) before completing the backbone")                                \
+	PARAM(backboneXorLeaves,                                                                                              \
+		  std::string,                                                                                                       \
+		  "bb-xor-leaves",                                                                                                   \
+		  "0",                                                                                                               \
+		  "Maximum number of nodes solved per round (0 = no limit)")                                                        \
+	PARAM(backboneXorPre,                                                                                                 \
+		  std::string,                                                                                                       \
+		  "bb-xor-pre",                                                                                                      \
+		  "0",                                                                                                               \
+		  "Mask of 0/1 cycled over the solver ids: CaDiCaL workers (c, s) with 1 run the XOR exploration before CadiBack")\
+	PARAM(backboneXorExport,                                                                                              \
+		  std::string,                                                                                                       \
+		  "bb-xor-export",                                                                                                   \
+		  "0",                                                                                                               \
+		  "Mask of 0/1 cycled over the solver ids: x workers with 1 also export their small learnt clauses (fixed "        \
+		  "literals are always exported)")                                                                                   \
+	PARAM(backboneXorDfs,                                                                                                 \
+		  std::string,                                                                                                       \
+		  "bb-xor-dfs",                                                                                                      \
+		  "adaptive",                                                                                                        \
+		  "DFS over the XOR tree: adaptive (solve inner nodes, go down after SAT, skip the subtree after a timeout) or "   \
+		  "leaves (solve the 2^m leaves only)")                                                                              \
+	PARAM(backboneXorConflicts,                                                                                           \
+		  std::string,                                                                                                       \
+		  "bb-xor-confl",                                                                                                    \
+		  "2x",                                                                                                              \
+		  "Conflict budget of each node, an exhausted node is skipped: '<f>x' = f times the conflicts of the first model "  \
+		  "(at least 1000), an integer = absolute (0 = no limit)")                                                           \
                                                                                                                        \
 	CATEGORY("Portfolio")                                                                                                 \
 	PARAM(solver, std::string, "solver", "c", "Portfolio of backbone solvers")                                            \
@@ -160,6 +205,23 @@ extern Parameters __globalParameters__;
 		 "    " BOLD "random" RESET ": shuffled with the solver seed\n"                                                \
 		 "    " BOLD "occ" RESET " / " BOLD "occ-rev" RESET                                                              \
 		 ": most / least frequent candidate literals in the formula first\n"                                         \
+		 "\n" BLUE "DiverseBackboneSearch (" YELLOW "-solver=x" BLUE ", CryptoMiniSat):\n" RESET                    \
+		 "  Each round draws m linearly independent random XORs over the candidate variables and visits the 2^m\n"      \
+		 "  nodes of the tree of their parities (DFS, a conflict prunes the subtree of its deepest XOR); every model\n"  \
+		 "  drops candidates (free variables are published on the board). The backbone is then completed as CadiBack\n" \
+		 "  (-bb-chunk, -bb-order). Options, one value per worker (comma-separated):\n"                                \
+		 "  " YELLOW "-bb-xor-m" RESET ": XORs per round (1 to 64)   " YELLOW "-bb-xor-rounds" RESET ": rounds\n"        \
+		 "  " YELLOW "-bb-xor-density" RESET ": " BOLD "0.5" RESET " (default) probability per variable, " BOLD "k" RESET \
+		 " integer: fixed length\n"                                                                                   \
+		 "  " YELLOW "-bb-xor-leaves" RESET ": nodes per round (0 = no limit)   " YELLOW "-bb-xor-confl" RESET           \
+		 ": conflicts per node, " BOLD "2x" RESET " (default) twice the first model, or absolute\n"                                                                       \
+		 "  " YELLOW "-bb-xor-dfs" RESET ": " BOLD "adaptive" RESET                                                      \
+		 " (default) solves the inner nodes with the first d XORs: SAT goes down, UNSAT prunes, an\n"                    \
+		 "    exhausted budget skips the subtree;  " BOLD "leaves" RESET ": solves the 2^m leaves only\n"                \
+		 "  " YELLOW "-bb-xor-pre" RESET ": 1 makes a CaDiCaL worker (c, s) run the same exploration first, then the\n"  \
+		 "    usual CadiBack (default 0; XORs in CNF, guarded by a round literal removed at the end)\n"                \
+		 "  " YELLOW "-bb-xor-export" RESET ": 1 also exports the learnt clauses (default 0: CryptoMiniSat gives no\n"    \
+		 "    glue, they flood the other workers; units, backbone and free variables are always shared)\n"              \
 		 "\n" BLUE "Output:\n" RESET "  'b <lit>' lines followed by 'b 0' (disable with " YELLOW "-no-backbone" RESET \
 		 ")\n"
 
