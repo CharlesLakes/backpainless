@@ -258,6 +258,11 @@ BRUTEFORCE_CONFIGS = [
     # per-worker chunk rates (-bb-chunk list cycled over the solver ids)
     ["-c=6", "-solver=cs", "-bb-chunk=0,1,10", "-bb-order=natural,occ,random"],
     ["-c=4", "-solver=sc", "-bb-chunk=0,2", "-bb-share-cand=1"],
+    # paper default K = infinity (Algorithm 1: k = 1, k <- 1 after SAT, k <- all after UNSAT); 0 is the sieve instead
+    ["-c=1", "-bb-chunk=1000000000"],
+    ["-c=1", "-solver=s", "-bb-chunk=1000000000"],
+    ["-c=8", "-solver=ccccsssc", "-bb-chunk=0,0,10,10,0,0,10,1000000000",
+     "-bb-order=natural,random,occ,random,occ,natural,occ,occ", "-bb-share-cand=1"],
 ]
 
 
@@ -302,6 +307,8 @@ SHARING_CONFIGS = [
     ["-c=8", "-shr-strat=1", "-bb-share-cand=1", "-bb-chunk=1"],
     ["-c=8", "-shr-strat=2", "-bb-share-cand=pc", "-bb-chunk=10", "-bb-share-units=0"],
     ["-c=8", "-solver=cs", "-bb-chunk=0,1,10,0", "-bb-order=natural,occ", "-bb-share-cand=1"],
+    ["-c=8", "-shr-strat=1", "-bb-chunk=1000000000"],
+    ["-c=8", "-solver=cs", "-bb-chunk=0,1000000000", "-bb-share-cand=1"],
 ]
 SHARING_FAST = ["-shr-sleep=10000", "-init-sleep=1000"]
 
