@@ -8,6 +8,7 @@
 #include "containers/BackboneResult.hpp"
 #include "containers/CandidateBoard.hpp"
 #include "solvers/CandidateOrder.hpp"
+#include "solvers/XorOptions.hpp"
 #include "containers/ClauseDatabase.hpp"
 #include "containers/ClauseExchange.hpp"
 #include "containers/ClauseUtils.hpp"
@@ -38,7 +39,8 @@ using SeedGenerator = std::function<int(BackboneSolverInterface*)>;
 enum class BackboneSolverType
 {
 	CADIBACK = 0,	  ///< CadiBack algorithm on top of CaDiCaL
-	CADIBACK_SQRT = 1 ///< CadiBack applied block by block (sqrt(#candidates) blocks)
+	CADIBACK_SQRT = 1, ///< CadiBack applied block by block (sqrt(#candidates) blocks)
+	DIVERSE_XOR = 2	   ///< DiverseBackboneSearch: random XOR exploration on top of CryptoMiniSat
 };
 
 /**
@@ -137,6 +139,11 @@ class BackboneSolverInterface : public SharingEntity
 
 	void setChunkRate(unsigned long rate) { this->m_chunkRate = rate; }
 
+	/// @brief Options of the random XOR exploration (set per worker by -bb-xor-*), used by the XOR solvers only.
+	const XorOptions& getXorOptions() const { return this->m_xorOptions; }
+
+	void setXorOptions(const XorOptions& options) { this->m_xorOptions = options; }
+
 	/// @brief Number of instances of the concrete type of this solver.
 	unsigned int getSolverTypeCount() const
 	{
@@ -200,6 +207,9 @@ class BackboneSolverInterface : public SharingEntity
 
 	/// @brief Chunk rate K (-bb-chunk).
 	unsigned long m_chunkRate = 0;
+
+	/// @brief Options of the random XOR exploration (-bb-xor-*).
+	XorOptions m_xorOptions;
 
 	static inline std::unordered_map<std::type_index, std::atomic<unsigned int>> s_instanceCounts;
 };

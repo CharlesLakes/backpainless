@@ -133,3 +133,4 @@ solvers/yalsat/yalsat
 *.la
 config.status
 libtool
+solvers/cryptominisat/build/

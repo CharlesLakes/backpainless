@@ -18,7 +18,8 @@ using IDScaler = std::function<unsigned(const std::shared_ptr<BackboneSolverInte
  * @brief Factory creating and diversifying the backbone solvers of the portfolio.
  * @ingroup solving
  *
- * Portfolio characters (-solver=<string>): 'c' CadiBack (CaDiCaL), 's' CadiBackSqrt (CadiBack block by block).
+ * Portfolio characters (-solver=<string>): 'c' CadiBack (CaDiCaL), 's' CadiBackSqrt (CadiBack block by block),
+ * 'x' DiverseBackboneSearch (random XOR exploration, CryptoMiniSat).
  */
 class BackboneSolverFactory
 {

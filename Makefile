@@ -51,6 +51,8 @@ YALSAT_BUILD := $(SOLVERS_DIR)/yalsat
 TASSAT_BUILD := $(SOLVERS_DIR)/tassat
 KISSAT_BUILD := $(SOLVERS_DIR)/kissat/build
 CADICAL_BUILD := $(SOLVERS_DIR)/cadical/build
+CMS_DIR := $(SOLVERS_DIR)/cryptominisat
+CMS_BUILD := $(CMS_DIR)/build
 KISSATMAB_BUILD := $(SOLVERS_DIR)/kissat_mab/build
 KISSATINC_BUILD := $(SOLVERS_DIR)/kissat-inc/build
 KISSATGASPI_BUILD := $(SOLVERS_DIR)/solvers/GASPIKISSAT/build
@@ -59,13 +61,15 @@ M4RI_DIR := $(LIBS_DIR)/m4ri-20200125
 
 # Define dependencies
 # ===================
-# Only CaDiCaL is linked: it is the SAT engine of the CadiBack backbone solver (src/solvers/CDCL/cadiback/).
+# CaDiCaL is the SAT engine of the CadiBack backbone solvers (src/solvers/CDCL/cadiback/), CryptoMiniSat the one of
+# DiverseBackboneSearch (src/solvers/CDCL/cryptominisat/, native XOR constraints).
 # The other vendored solvers in solvers/ can still be built with their own targets (make kissat, make solvers, ...).
-DEPENDENCIES := $(CADICAL_BUILD)/libcadical.a
+DEPENDENCIES := $(CADICAL_BUILD)/libcadical.a $(CMS_BUILD)/libcryptominisat5.a
 
 # Library flags
 # =============
 LIBS := -l:libcadical.a -L$(CADICAL_BUILD) \
+		-l:libcryptominisat5.a -L$(CMS_BUILD) \
 		-lpthread -lz -lm $(shell mpic++ --showme:link)
 
 # Include directories
@@ -84,7 +88,7 @@ RELEASE_OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(RELEASE_BUILD_DIR)/%.o)
 # ==============
 .PHONY: all
 all:
-	$(MAKE) cadical && $(MAKE) painless
+	$(MAKE) cadical && $(MAKE) cryptominisat && $(MAKE) painless
 
 .DEFAULT_GOAL := all
 
@@ -132,7 +136,7 @@ $(RELEASE_BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 # Simplified library targets
 # ==========================
-.PHONY: minisat glucose lingeling kissat kissat_mab kissat_inc kissat_gaspi yalsat cadical maple m4ri tassat
+.PHONY: minisat glucose lingeling kissat kissat_mab kissat_inc kissat_gaspi yalsat cadical cryptominisat maple m4ri tassat
 
 solvers: minisat glucose lingeling kissat kissat_mab kissat_inc kissat_gaspi yalsat cadical maple tassat
 
@@ -148,6 +152,7 @@ kissat_inc: $(KISSATINC_BUILD)/libkissat_inc.a
 yalsat: $(YALSAT_BUILD)/libyals.a
 tassat: $(TASSAT_BUILD)/libtas.a
 cadical: $(CADICAL_BUILD)/libcadical.a
+cryptominisat: $(CMS_BUILD)/libcryptominisat5.a
 maple: $(MAPLE_BUILD)/libmapleCOMSPS.a
 m4ri: $(M4RI_DIR)/.libs/libm4ri.a
 
@@ -191,6 +196,41 @@ $(CADICAL_BUILD)/libcadical.a:
 	cd $(SOLVERS_DIR)/cadical && bash ./configure
 	$(MAKE) -C $(SOLVERS_DIR)/cadical
 
+# CryptoMiniSat 5.11.21 (last release that does not depend on CaDiCaL/CadiBack, whose symbols would clash with the
+# vendored CaDiCaL), built without cmake: the same sources and defines as its default cmake configuration (no Python,
+# no SQLite, no BreakID, no GPU), with zlib, assertions off
+CMS_SRCS := $(addprefix $(CMS_DIR)/src/, cnf.cpp frat.cpp propengine.cpp varreplacer.cpp clausecleaner.cpp \
+	occsimplifier.cpp gatefinder.cpp subsumestrengthen.cpp clauseallocator.cpp sccfinder.cpp solverconf.cpp \
+	distillerlong.cpp distillerlitrem.cpp distillerbin.cpp distillerlongwithimpl.cpp str_impl_w_impl.cpp \
+	solutionextender.cpp completedetachreattacher.cpp searcher.cpp solver.cpp hyperengine.cpp subsumeimplicit.cpp \
+	datasync.cpp reducedb.cpp bva.cpp intree.cpp searchstats.cpp xorfinder.cpp cardfinder.cpp cryptominisat_c.cpp \
+	sls.cpp sqlstats.cpp vardistgen.cpp ccnr.cpp ccnr_cms.cpp lucky.cpp get_clause_query.cpp gaussian.cpp \
+	packedrow.cpp matrixfinder.cpp oracle/oracle.cpp cryptominisat.cpp)
+CMS_CSRCS := $(addprefix $(CMS_DIR)/src/, picosat/picosat.c picosat/version.c)
+CMS_OBJS := $(CMS_SRCS:$(CMS_DIR)/src/%.cpp=$(CMS_BUILD)/%.o) $(CMS_CSRCS:$(CMS_DIR)/src/%.c=$(CMS_BUILD)/%.o) \
+	$(CMS_BUILD)/GitSHA1.o
+CMS_DEFINES := -DNDEBUG -DRDB0_ONLY_FEATURES -DTRACE -DUSE_ZLIB -I$(CMS_DIR) -I$(CMS_DIR)/src -w
+CMS_CXXFLAGS := -std=c++17 -O3 -pthread $(CMS_DEFINES)
+
+$(CMS_BUILD)/libcryptominisat5.a: $(CMS_OBJS)
+	ar rcs $@ $^
+
+$(CMS_BUILD)/GitSHA1.cpp: $(CMS_DIR)/src/GitSHA1.cpp.in
+	@mkdir -p $(@D)
+	sed -e 's/@GIT_SHA1@/4c9a6b6b459b7c1381744115ccfe744f1121794b/' -e 's/@PROJECT_VERSION@/5.11.21/' \
+		-e 's/@[A-Za-z0-9_]*@//g' $< > $@
+
+$(CMS_BUILD)/%.o: $(CMS_BUILD)/%.cpp
+	$(CXX) -c $< -o $@ $(CMS_CXXFLAGS)
+
+$(CMS_BUILD)/%.o: $(CMS_DIR)/src/%.cpp
+	@mkdir -p $(@D)
+	$(CXX) -c $< -o $@ $(CMS_CXXFLAGS)
+
+$(CMS_BUILD)/%.o: $(CMS_DIR)/src/%.c
+	@mkdir -p $(@D)
+	$(CC) -c $< -o $@ -O3 $(CMS_DEFINES)
+
 $(MAPLE_BUILD)/libmapleCOMSPS.a:
 	$(MAKE) -C $(SOLVERS_DIR)/mapleCOMSPS r
 
@@ -211,6 +251,7 @@ cleansolvers:
 	$(MAKE) clean -C $(SOLVERS_DIR)/kissat-inc
 	# $(MAKE) clean -C $(SOLVERS_DIR)/GASPIKISSAT
 	$(MAKE) clean -C $(SOLVERS_DIR)/cadical
+	rm -rf $(CMS_BUILD)
 	$(MAKE) clean -C $(SOLVERS_DIR)/mapleCOMSPS
 	$(MAKE) clean -C $(SOLVERS_DIR)/minisat
 	$(MAKE) clean -C $(SOLVERS_DIR)/glucose

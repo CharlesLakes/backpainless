@@ -5,6 +5,8 @@
 
 #include "solvers/CDCL/cadiback/CadiBack.hpp"
 #include "solvers/CDCL/cadiback/CadiBackSqrt.hpp"
+#include "solvers/CDCL/cryptominisat/DiverseBackboneSearch.hpp"
+#include "solvers/XorOptions.hpp"
 
 #include "containers/ClauseDatabases/ClauseDatabaseFactory.hpp"
 
@@ -24,6 +26,9 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 	parseCandidateOrderList(__globalParameters__.backboneOrder, orders);
 	std::vector<unsigned long> chunkRates;
 	parseChunkRateList(__globalParameters__.backboneChunkRate, chunkRates);
+	XorOptionLists xorOptions;
+	std::string xorError;
+	parseXorOptionLists(xorOptions, xorError);
 
 	for (auto solver : solvers) {
 		solver->setSolverId(gIDScaler(solver));
@@ -38,6 +43,7 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 				  solver->getShareBackboneUnits(),
 				  candidateOrderName(solver->getCandidateOrder()),
 				  solver->getChunkRate());
+		solver->setXorOptions(xorOptions.forSolver(solver->getSolverId()));
 	}
 
 	for (auto solver : solvers) {
@@ -89,6 +95,8 @@ BackboneSolverFactory::createSolver(char type, char importDBType)
 			return std::make_shared<CadiBack>(id, importDB);
 		case 's':
 			return std::make_shared<CadiBackSqrt>(id, importDB);
+		case 'x':
+			return std::make_shared<DiverseBackboneSearch>(id, importDB);
 
 		default:
 			LOGERROR("The backbone solver type '%c' specified is not available!", type);
