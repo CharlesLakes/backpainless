@@ -291,6 +291,9 @@ BRUTEFORCE_CONFIGS = [
     ["-c=4", "-solver=mcsx", "-bb-maxsat-rounds=0,2", "-bb-share-cand=1"],
     ["-c=2", "-solver=m", "-bb-xor-pre=1", "-bb-maxsat-rounds=2,0", "-bb-no-flip"],
     ["-c=2", "-solver=m", "-bb-maxsat-patience=1,0", "-bb-share-cand=1"],
+    # whole portfolio: colador (-bb-chunk=0), paper K = infinity, sqrt, XOR pre-phase, XOR (x) and MaxSAT (m)
+    ["-c=8", "-solver=ccccsxmm", "-bb-chunk=0,1000000000,10,0,0,0,0,0", "-bb-order=natural,natural,occ,random",
+     "-bb-xor-pre=00010000", "-bb-share-cand=1", "-bb-share-units=1110"],
 ]
 
 
@@ -345,6 +348,8 @@ SHARING_CONFIGS = [
     ["-c=8", "-solver=m", "-bb-maxsat-rounds=0,1"],
     ["-c=8", "-solver=cm", "-bb-share-cand=1"],
     ["-c=8", "-solver=ccccsssm", "-bb-share-cand=1", "-bb-share-units=10"],
+    ["-c=8", "-solver=ccccsxmm", "-bb-chunk=0,1000000000,10,0,0,0,0,0", "-bb-xor-pre=00010000",
+     "-bb-share-cand=1"],
 ]
 SHARING_FAST = ["-shr-sleep=10000", "-init-sleep=1000"]
 
