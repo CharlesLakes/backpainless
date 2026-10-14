@@ -283,6 +283,14 @@ BRUTEFORCE_CONFIGS = [
     # patience of the exploration (-bb-xor-patience): abandon a round without new free variables, restart if useful
     ["-c=2", "-bb-xor-pre=1", "-bb-xor-patience=1000,0", "-bb-xor-rounds=3"],
     ["-c=2", "-solver=xc", "-bb-xor-pre=1", "-bb-xor-patience=1x,1000", "-bb-xor-rounds=4", "-bb-share-cand=1"],
+    # m = MaxSatBackbone (rounds of EvalMaxSAT, soft = negated candidates); -bb-maxsat-rounds caps them, then CadiBack
+    ["-c=1", "-solver=m"],
+    ["-c=1", "-solver=m", "-bb-no-flip"],
+    ["-c=1", "-solver=m", "-bb-maxsat-rounds=1", "-bb-chunk=1"],
+    ["-c=2", "-solver=mc", "-bb-share-cand=1c", "-bb-share-units=10"],
+    ["-c=4", "-solver=mcsx", "-bb-maxsat-rounds=0,2", "-bb-share-cand=1"],
+    ["-c=2", "-solver=m", "-bb-xor-pre=1", "-bb-maxsat-rounds=2,0", "-bb-no-flip"],
+    ["-c=2", "-solver=m", "-bb-maxsat-patience=1,0", "-bb-share-cand=1"],
 ]
 
 
@@ -334,6 +342,9 @@ SHARING_CONFIGS = [
     ["-c=8", "-solver=ccccsssx", "-bb-share-cand=1", "-bb-xor-export=1"],
     ["-c=8", "-solver=ccccsssc", "-bb-chunk=0,0,10,10,0,0,10,1", "-bb-xor-pre=00000001", "-bb-share-cand=1"],
     ["-c=8", "-bb-xor-pre=1", "-bb-xor-m=12", "-bb-xor-dfs=adaptive,leaves"],
+    ["-c=8", "-solver=m", "-bb-maxsat-rounds=0,1"],
+    ["-c=8", "-solver=cm", "-bb-share-cand=1"],
+    ["-c=8", "-solver=ccccsssm", "-bb-share-cand=1", "-bb-share-units=10"],
 ]
 SHARING_FAST = ["-shr-sleep=10000", "-init-sleep=1000"]
 
