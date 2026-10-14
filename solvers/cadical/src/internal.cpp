@@ -290,6 +290,50 @@ int Internal::cdcl_loop_with_inprocessing () {
 }
 
 // Begin Painless
+// Adapted from the MaxHS version in the CaDiCaL of EvalMaxSAT: every decision
+// is propagated before the next one (an antecedent falsified by a previous
+// one is a conflict), the trail is then reset to the root level.
+bool Internal::find_up_implicants (const vector<int> &decisions,
+                                   vector<int> &implicants) {
+  assert (clause.empty ());
+  int res = already_solved ();
+  if (!res) {
+    const int save_opt = opts.restoreall;
+    opts.restoreall = 2;
+    res = restore_clauses ();
+    opts.restoreall = save_opt;
+  }
+  if (res)
+    return false;
+  backtrack ();
+  const size_t start = trail.size ();
+  bool ok = true;
+  for (const auto &lit : decisions) {
+    const signed char tmp = val (lit);
+    if (tmp < 0) {
+      ok = false;
+      break;
+    }
+    if (tmp > 0)
+      continue;
+    search_assume_decision (lit);
+    if (!propagate ()) {
+      ok = false;
+      break;
+    }
+  }
+  if (ok)
+    for (size_t i = start; i < trail.size (); i++) {
+      const int lit = trail[i];
+      if (std::find (decisions.begin (), decisions.end (), lit) ==
+          decisions.end ())
+        implicants.push_back (lit);
+    }
+  conflict = 0;
+  backtrack ();
+  return ok;
+}
+
 bool Internal::importing () {
   return level == 0 && external->learner != 0 && watching () &&
          external->learner->hasClauseToImport ();

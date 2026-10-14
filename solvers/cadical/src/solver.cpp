@@ -1199,6 +1199,18 @@ void Solver::configurations () { Config::usage (); }
 
 // Begin Painless
 Stats *Solver::getStatistics () { return &(this->internal->stats); }
+
+bool Solver::find_up_implicants (const std::vector<int> &antecedents,
+                                 std::vector<int> &implicants) {
+  TRACE ("find_up_implicants");
+  REQUIRE_VALID_STATE ();
+  for (const auto &lit : antecedents)
+    REQUIRE_VALID_LIT (lit);
+  transition_to_unknown_state ();
+  const bool res = external->find_up_implicants (antecedents, implicants);
+  LOG_API_CALL_RETURNS ("find_up_implicants", res);
+  return res;
+}
 // End Painless
 
 void Solver::statistics () {
