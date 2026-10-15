@@ -117,12 +117,13 @@ void
 BackboneSolverFactory::createSolvers(int maxSolvers,
 									 char importDBType,
 									 const std::string& portfolio,
-									 std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers)
+									 std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers,
+									 int firstId)
 {
 	unsigned int typeCount = portfolio.size();
 	LOGDEBUG1("Portfolio is '%s', of size %u", portfolio.c_str(), typeCount);
 	for (size_t i = 0; i < maxSolvers && typeCount > 0; i++) {
-		auto solver = createSolver(portfolio.at(i % typeCount), importDBType);
+		auto solver = createSolver(portfolio.at((firstId + i) % typeCount), importDBType);
 		if (solver)
 			solvers.push_back(solver);
 	}

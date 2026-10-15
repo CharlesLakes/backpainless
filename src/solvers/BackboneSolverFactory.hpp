@@ -34,11 +34,14 @@ class BackboneSolverFactory
 
 	/**
 	 * @brief Creates 'count' solvers by cycling through the characters of 'portfolio'.
+	 * @param firstId Global id of the first solver (rank * count with MPI): the portfolio is indexed by the global id,
+	 * like the other per-worker options.
 	 */
 	static void createSolvers(int count,
 							  char importDBType,
 							  const std::string& portfolio,
-							  std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers);
+							  std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers,
+							  int firstId = 0);
 
 	/// @brief Prints the statistics table of the solvers.
 	static void printStats(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers);

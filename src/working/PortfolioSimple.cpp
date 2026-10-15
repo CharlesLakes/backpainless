@@ -82,8 +82,12 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 	// Init Database Factory For Solvers (Is it better to put this in the BackboneSolverFactory as for SharingFactory ?)
 	ClauseDatabaseFactory::initialize(__globalParameters__.maxClauseSize, __globalParameters__.importDBCap, 2, 1);
 
-	BackboneSolverFactory::createSolvers(
-		__globalParameters__.cpus, __globalParameters__.importDB.c_str()[0], __globalParameters__.solver, solvers);
+	/* Indexed by the global id (as in diversification), so that -solver also applies across MPI ranks */
+	BackboneSolverFactory::createSolvers(__globalParameters__.cpus,
+										 __globalParameters__.importDB.c_str()[0],
+										 __globalParameters__.solver,
+										 solvers,
+										 dist ? mpi_rank * __globalParameters__.cpus : 0);
 
 	IDScaler globalIDScaler;
 	IDScaler typeIDScaler;
