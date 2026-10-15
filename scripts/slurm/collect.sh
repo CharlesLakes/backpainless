@@ -4,7 +4,7 @@
 # answer for the same instance. Writes <dir>/results.tsv.
 #
 # Usage: scripts/slurm/collect.sh runs/<job id> [number of tasks]
-#   with the number of tasks, also lists the missing ones and the sbatch command to resubmit them
+#   with the number of tasks, also lists the missing ones and the command to run them
 
 set -euo pipefail
 export LC_ALL=C
@@ -13,7 +13,7 @@ dir=${1:?usage: collect.sh runs/<job id> [number of tasks]}
 total=${2:-}
 
 {
-	printf "task\tinstance\tportfolio\trep\texit\tstatus\tsolved\twall\tbb_size\tbb_hash\twinner\ttimeout\tnode\n"
+	printf "task\tinstance\tportfolio\trep\texit\tstatus\tsolved\twall\tbb_size\tbb_hash\twinner\ttimeout\tnodes\n"
 	find "$dir/rows" -name '[0-9]*.tsv' -exec cat {} + | sort -n
 } >"$dir/results.tsv"
 echo "$(($(wc -l <"$dir/results.tsv") - 1)) tasks done, results in $dir/results.tsv"
@@ -25,8 +25,8 @@ if [[ -n $total ]]; then
 		{ out = out (out ? "," : "") (s == p ? s : s "-" p); s = p = $1 }
 		END { if (NR) print out (out ? "," : "") (s == p ? s : s "-" p) }')
 	if [[ -n $missing ]]; then
-		echo "missing tasks: $missing (still queued/running, or failed). To resubmit them:"
-		echo "  sbatch --array=$missing --export=ALL,OUT=$dir scripts/slurm/bench.sbatch"
+		echo "missing tasks: $missing (still running, time limit, or failed). To run them, with the same configuration:"
+		echo "  OUT=$dir bash scripts/slurm/bench.sbatch --submit"
 	fi
 fi
 
