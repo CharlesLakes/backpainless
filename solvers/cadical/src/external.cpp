@@ -819,6 +819,24 @@ void External::copy_flags (External &other) const {
 
 /*------------------------------------------------------------------------*/
 // Begin Painless
+bool External::find_up_implicants (const vector<int> &antecedents,
+                                   vector<int> &implicants) {
+  reset_extended ();
+  vector<int> decisions;
+  for (const auto &elit : antecedents)
+    decisions.push_back (internalize (elit));
+  update_molten_literals ();
+  vector<int> ilits;
+  const bool res = internal->find_up_implicants (decisions, ilits);
+  for (const auto &ilit : ilits) {
+    const int elit = internal->externalize (ilit);
+    if (elit)
+      implicants.push_back (elit);
+  }
+  reset_limits ();
+  return res;
+}
+
 void External::export_learned_empty_clause () {
   assert (learner);
   if (learner->learning (0, 0)) {

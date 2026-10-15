@@ -260,6 +260,11 @@ struct External {
 
   void reset_assumptions ();
 
+  // Begin Painless
+  bool find_up_implicants (const std::vector<int> &antecedents,
+                           std::vector<int> &implicants);
+  // End Painless
+
   // similarily to 'failed', 'conclude' needs to know about failing
   // assumptions and therefore needs to be reset when leaving the
   // 'UNSATISFIED' state.

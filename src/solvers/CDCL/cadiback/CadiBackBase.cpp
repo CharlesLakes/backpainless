@@ -389,6 +389,22 @@ CadiBackBase::syncWithBoard(std::vector<int>& candidates)
 	candidates.resize(kept);
 }
 
+int
+CadiBackBase::freshVariable()
+{
+	m_lastVariable = std::max({ m_lastVariable, (int)m_nbVars, solver->vars() });
+	return ++m_lastVariable;
+}
+
+void
+CadiBackBase::setSolveDeadline(double seconds)
+{
+	m_deadline = std::chrono::steady_clock::now() +
+				 std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+					 std::chrono::duration<double>(std::clamp(seconds, 0.0, 1e7))); /* no overflow */
+	m_hasDeadline = true;
+}
+
 std::vector<int>
 CadiBackBase::getBackbone()
 {

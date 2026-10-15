@@ -143,6 +143,19 @@ Parameters::init(int argc, char** argv)
 		exit(PERR_ARGS_ERROR);
 	}
 
+	std::vector<unsigned long> maxSatRounds;
+	if (!parseChunkRateList(__globalParameters__.backboneMaxSatRounds, maxSatRounds)) {
+		LOGERROR("Invalid -bb-maxsat-rounds=%s: expected a comma-separated list of non-negative integers",
+				 __globalParameters__.backboneMaxSatRounds.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+	std::vector<unsigned long> maxSatPatience;
+	if (!parseChunkRateList(__globalParameters__.backboneMaxSatPatience, maxSatPatience)) {
+		LOGERROR("Invalid -bb-maxsat-patience=%s: expected a comma-separated list of non-negative integers",
+				 __globalParameters__.backboneMaxSatPatience.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
 	XorOptionLists xorOptions;
 	std::string xorError;
 	if (!parseXorOptionLists(xorOptions, xorError)) {

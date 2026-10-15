@@ -453,6 +453,19 @@ public:
   CubesWithStatus generate_cubes (int, int min_depth = 0);
 
   void reset_assumptions ();
+
+  // Begin Painless
+  // Unit propagation of 'antecedents' (taken as decisions, from MaxHS through
+  // EvalMaxSAT): returns false on a conflict, otherwise fills 'implicants'
+  // with the other literals implied by unit propagation.  Needed by the
+  // EvalMaxSAT at-most-one detection.  Leaves the solver at the root level.
+  //
+  //   require (VALID)
+  //   ensure (UNKNOWN)
+  //
+  bool find_up_implicants (const std::vector<int> &antecedents,
+                           std::vector<int> &implicants);
+  // End Painless
   void reset_constraint ();
 
   // Return the current state of the solver as defined above.

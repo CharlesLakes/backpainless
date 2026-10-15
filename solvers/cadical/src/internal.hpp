@@ -1230,6 +1230,10 @@ struct Internal {
   // though. This is all orchestrated by the 'solve' function.
   //
   int already_solved ();
+  // Begin Painless
+  bool find_up_implicants (const vector<int> &decisions,
+                           vector<int> &implicants);
+  // End Painless
   int restore_clauses ();
   bool preprocess_round (int round);
   int preprocess ();
