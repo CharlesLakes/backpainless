@@ -5,6 +5,7 @@
 #include "sharing/SharingStrategy.hpp"
 
 #include "containers/BackboneResult.hpp"
+#include "containers/CandidateBoard.hpp"
 
 #include <mpi.h>
 
@@ -114,7 +115,24 @@ class GlobalSharingStrategy : public SharingStrategy
 	 */
 	virtual bool doSharing() override;
 
+	/**
+	 * @brief Exchanges @p board (-bb-share-cand) with the other ranks at every round.
+	 * @warning Every rank must set a board, or none: the exchange is a collective.
+	 */
+	void setCandidateBoard(const std::shared_ptr<CandidateBoard>& board) { m_board = board; }
+
   protected:
+	/**
+	 * @brief Merges the boards of all the ranks into the local one (MPI_Allreduce with MPI_MAX on the raw statuses).
+	 * A status only goes from unknown to its final value and two ranks never disagree on it, so the maximum is the
+	 * union of what the ranks know.
+	 */
+	void exchangeCandidateBoard();
+
+	std::shared_ptr<CandidateBoard> m_board; ///< Board exchanged across ranks, nullptr if none
+	std::vector<int8_t> m_boardBuffer;		 ///< Snapshot of the local board, reduced in place
+	unsigned long m_boardReceived = 0;		 ///< Statuses learnt from the other ranks
+
 	GlobalSharingStatistics gstats; ///< Statistics for global sharing
 	bool requests_sent; ///< Flag indicating if requests to end were sent to the root
 	std::vector<MPI_Request> recv_end_requests; ///< MPI requests for non-blocking receive of end signals

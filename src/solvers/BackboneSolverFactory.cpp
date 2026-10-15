@@ -60,18 +60,18 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 	LOG0("Diversification done");
 }
 
-void
+std::shared_ptr<CandidateBoard>
 BackboneSolverFactory::connectCandidateBoard(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers,
 											 unsigned int nbVars)
 {
 	/* Validated by Parameters::init: characters in 0, 1, p (publish), c (consume) */
 	const std::string& candMask = __globalParameters__.backboneShareCandidates;
 	if (candMask.find_first_not_of('0') == std::string::npos)
-		return;
+		return nullptr;
 
 	auto board = std::make_shared<CandidateBoard>(nbVars);
 	for (auto solver : solvers) {
-		/* Indexed by the global id, like -bb-share-units. The board itself is local to the process */
+		/* Indexed by the global id, like -bb-share-units. With -dist the global strategy exchanges the board */
 		char mode = candMask[solver->getSolverId() % candMask.size()];
 		solver->setCandidateBoard(board, mode == '1' || mode == 'p', mode == '1' || mode == 'c');
 		LOGDEBUG1("Solver %d candidate board: publish %d, consume %d",
@@ -79,6 +79,7 @@ BackboneSolverFactory::connectCandidateBoard(const std::vector<std::shared_ptr<B
 				  solver->getPublishCandidates(),
 				  solver->getConsumeCandidates());
 	}
+	return board;
 }
 
 std::shared_ptr<BackboneSolverInterface>

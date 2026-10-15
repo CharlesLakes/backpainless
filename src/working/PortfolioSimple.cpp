@@ -107,7 +107,7 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 		};
 	}
 	BackboneSolverFactory::diversification(solvers, globalIDScaler, typeIDScaler);
-	BackboneSolverFactory::connectCandidateBoard(solvers, varCount);
+	std::shared_ptr<CandidateBoard> board = BackboneSolverFactory::connectCandidateBoard(solvers, varCount);
 
 	LOG0("Diversified all solvers");
 
@@ -139,6 +139,12 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 				lstrat->connectProducer(gstrat); // This adds lstrat as a client to gstrat
 			}
 		}
+	}
+
+	/* The board is exchanged across ranks, every rank has one (same parameters), so the collective stays matched */
+	if (board && !__globalParameters__.backboneShareCandidatesLocal) {
+		for (auto& gstrat : this->globalStrategies)
+			gstrat->setCandidateBoard(board);
 	}
 
 	std::vector<std::shared_ptr<SharingStrategy>> sharingStrategiesConcat;

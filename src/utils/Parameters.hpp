@@ -43,6 +43,11 @@
 		  "0",                                                                                                               \
 		  "Mask cycled over the solver ids for the board of decided variables: 0 off, 1 publish and consume, p publish, "    \
 		  "c consume")                                                                                                       \
+	PARAM(backboneShareCandidatesLocal,                                                                                   \
+		  bool,                                                                                                              \
+		  "bb-share-cand-local",                                                                                             \
+		  false,                                                                                                             \
+		  "With -dist, keep the board of decided variables inside each process instead of exchanging it across MPI ranks")   \
 	/* NEW ORDER (5/6): add the name to this help and to DETAILED_HELP_BACKBONE below */                                \
 	PARAM(backboneOrder,                                                                                                  \
 		  std::string,                                                                                                       \
@@ -219,6 +224,8 @@ extern Parameters __globalParameters__;
 		 "    " BOLD "p" RESET ": publish only    " BOLD "c" RESET ": consume only\n"                                   \
 		 "    The mask is cycled over the solver ids, e.g. " YELLOW "-bb-share-cand=1c" RESET                            \
 		 ": even ids publish and consume, odd ids only consume\n"                                                     \
+		 "    With " YELLOW "-dist" RESET ", the board is exchanged across MPI ranks by the global sharing strategy\n"     \
+		 "  " YELLOW "-bb-share-cand-local" RESET ": With -dist, keep the board inside each process\n"                   \
 		 "  " YELLOW "-bb-order" RESET ": Order of the initial candidates, one name per worker (comma-separated)\n"     \
 		 "    " BOLD "natural" RESET ": variable index (default)   " BOLD "reverse" RESET ": decreasing index\n"       \
 		 "    " BOLD "random" RESET ": shuffled with the solver seed\n"                                                \

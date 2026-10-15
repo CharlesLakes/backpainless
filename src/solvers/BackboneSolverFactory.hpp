@@ -47,9 +47,10 @@ class BackboneSolverFactory
 	static void printStats(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers);
 
 	/// @brief Creates the board of decided variables and connects the solvers selected by -bb-share-cand, by global
-	/// id (call after diversification). Does nothing when every worker has mode 0.
-	static void connectCandidateBoard(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers,
-									  unsigned int nbVars);
+	/// id (call after diversification). Returns the board, nullptr when every worker has mode 0.
+	static std::shared_ptr<CandidateBoard> connectCandidateBoard(
+		const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers,
+		unsigned int nbVars);
 
 	/// @brief Sets the ids of the solvers using the scalers, then calls their native diversification.
 	static void diversification(
