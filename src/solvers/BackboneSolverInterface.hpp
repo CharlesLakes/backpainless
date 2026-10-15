@@ -40,7 +40,8 @@ enum class BackboneSolverType
 {
 	CADIBACK = 0,	  ///< CadiBack algorithm on top of CaDiCaL
 	CADIBACK_SQRT = 1, ///< CadiBack applied block by block (sqrt(#candidates) blocks)
-	DIVERSE_XOR = 2	   ///< DiverseBackboneSearch: random XOR exploration on top of CryptoMiniSat
+	DIVERSE_XOR = 2,   ///< DiverseBackboneSearch: random XOR exploration on top of CryptoMiniSat
+	MAXSAT = 3		   ///< MaxSatBackbone: rounds of MaxSAT (EvalMaxSAT) on top of CaDiCaL
 };
 
 /**
@@ -139,6 +140,18 @@ class BackboneSolverInterface : public SharingEntity
 
 	void setChunkRate(unsigned long rate) { this->m_chunkRate = rate; }
 
+	/// @brief Maximum number of MaxSAT rounds (set per worker by -bb-maxsat-rounds, 0 = until no candidate is
+	/// dropped), used by MaxSatBackbone only.
+	unsigned long getMaxSatRounds() const { return this->m_maxSatRounds; }
+
+	void setMaxSatRounds(unsigned long rounds) { this->m_maxSatRounds = rounds; }
+
+	/// @brief SAT calls without a dropped candidate after which a MaxSAT round that already dropped some is abandoned
+	/// (set per worker by -bb-maxsat-patience, 0 = never), used by MaxSatBackbone only.
+	unsigned long getMaxSatPatience() const { return this->m_maxSatPatience; }
+
+	void setMaxSatPatience(unsigned long calls) { this->m_maxSatPatience = calls; }
+
 	/// @brief Options of the random XOR exploration (set per worker by -bb-xor-*), used by the XOR solvers only.
 	const XorOptions& getXorOptions() const { return this->m_xorOptions; }
 
@@ -210,6 +223,12 @@ class BackboneSolverInterface : public SharingEntity
 
 	/// @brief Options of the random XOR exploration (-bb-xor-*).
 	XorOptions m_xorOptions;
+
+	/// @brief Maximum number of MaxSAT rounds (-bb-maxsat-rounds), 0 = no limit.
+	unsigned long m_maxSatRounds = 0;
+
+	/// @brief Patience of a MaxSAT round in SAT calls (-bb-maxsat-patience), 0 = never abandoned.
+	unsigned long m_maxSatPatience = 0;
 
 	static inline std::unordered_map<std::type_index, std::atomic<unsigned int>> s_instanceCounts;
 };

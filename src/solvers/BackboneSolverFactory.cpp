@@ -5,6 +5,7 @@
 
 #include "solvers/CDCL/cadiback/CadiBack.hpp"
 #include "solvers/CDCL/cadiback/CadiBackSqrt.hpp"
+#include "solvers/CDCL/cadiback/MaxSatBackbone.hpp"
 #include "solvers/CDCL/cryptominisat/DiverseBackboneSearch.hpp"
 #include "solvers/XorOptions.hpp"
 
@@ -26,6 +27,10 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 	parseCandidateOrderList(__globalParameters__.backboneOrder, orders);
 	std::vector<unsigned long> chunkRates;
 	parseChunkRateList(__globalParameters__.backboneChunkRate, chunkRates);
+	std::vector<unsigned long> maxSatRounds;
+	parseChunkRateList(__globalParameters__.backboneMaxSatRounds, maxSatRounds);
+	std::vector<unsigned long> maxSatPatience;
+	parseChunkRateList(__globalParameters__.backboneMaxSatPatience, maxSatPatience);
 	XorOptionLists xorOptions;
 	std::string xorError;
 	parseXorOptionLists(xorOptions, xorError);
@@ -37,6 +42,8 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 		solver->setShareBackboneUnits(shareMask[solver->getSolverId() % shareMask.size()] == '1');
 		solver->setCandidateOrder(orders[solver->getSolverId() % orders.size()]);
 		solver->setChunkRate(chunkRates[solver->getSolverId() % chunkRates.size()]);
+		solver->setMaxSatRounds(maxSatRounds[solver->getSolverId() % maxSatRounds.size()]);
+		solver->setMaxSatPatience(maxSatPatience[solver->getSolverId() % maxSatPatience.size()]);
 		LOGDEBUG1("Computing Id %d,%d, share backbone units: %d, candidate order: %s, chunk rate: %lu",
 				  solver->getSolverId(),
 				  solver->getSolverTypeId(),
@@ -97,6 +104,8 @@ BackboneSolverFactory::createSolver(char type, char importDBType)
 			return std::make_shared<CadiBackSqrt>(id, importDB);
 		case 'x':
 			return std::make_shared<DiverseBackboneSearch>(id, importDB);
+		case 'm':
+			return std::make_shared<MaxSatBackbone>(id, importDB);
 
 		default:
 			LOGERROR("The backbone solver type '%c' specified is not available!", type);

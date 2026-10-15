@@ -101,6 +101,19 @@
 		  "2x",                                                                                                              \
 		  "Conflict budget of each node, an exhausted node is skipped: '<f>x' = f times the conflicts of the first model "  \
 		  "(at least 1000), an integer = absolute (0 = no limit)")                                                           \
+	/* MaxSatBackbone (-solver=m) */                                                                                     \
+	PARAM(backboneMaxSatRounds,                                                                                           \
+		  std::string,                                                                                                       \
+		  "bb-maxsat-rounds",                                                                                                \
+		  "0",                                                                                                               \
+		  "Maximum number of MaxSAT rounds of an m worker, comma-separated list cycled over the solver ids (0 = until a "   \
+		  "round drops no candidate); the CadiBack loop finishes the candidates left")                                      \
+	PARAM(backboneMaxSatPatience,                                                                                         \
+		  std::string,                                                                                                       \
+		  "bb-maxsat-patience",                                                                                              \
+		  "1000",                                                                                                            \
+		  "SAT calls without a dropped candidate after which an m worker abandons a MaxSAT round that already dropped "      \
+		  "some, and starts a new one on the candidates left (comma-separated list cycled over the solver ids, 0 = never)") \
                                                                                                                        \
 	CATEGORY("Portfolio")                                                                                                 \
 	PARAM(solver, std::string, "solver", "c", "Portfolio of backbone solvers")                                            \
@@ -230,6 +243,15 @@ extern Parameters __globalParameters__;
 		 "    usual CadiBack (default 0; XORs in CNF, guarded by a round literal removed at the end)\n"                \
 		 "  " YELLOW "-bb-xor-export" RESET ": 1 also exports the learnt clauses (default 0: CryptoMiniSat gives no\n"    \
 		 "    glue, they flood the other workers; units, backbone and free variables are always shared)\n"              \
+		 "\n" BLUE "MaxSatBackbone (" YELLOW "-solver=m" BLUE ", EvalMaxSAT on CaDiCaL):\n" RESET                       \
+		 "  Each round solves the MaxSAT problem hard = formula, soft = the negation of every candidate: an optimum\n"   \
+		 "  flips as many candidates as possible, and every model met on the way drops candidates. A round whose\n"     \
+		 "  optimum flips no candidate proves that all of them are backbone. Learnt clauses, backbone units and the\n"  \
+		 "  board are shared as by CadiBack. " YELLOW "-bb-maxsat-rounds" RESET                                          \
+		 ": rounds per worker (default 0 = until stagnation),\n    the CadiBack loop finishes the candidates left\n"    \
+		 "  " YELLOW "-bb-maxsat-patience" RESET ": SAT calls without a dropped candidate before a round that already\n"  \
+		 "    dropped some is abandoned for a new one (default 1000, 0 = never); a round that drops nothing always\n"    \
+		 "    reaches its optimum, so the search stays complete. A round also ends when no candidate is left\n"           \
 		 "\n" BLUE "Output:\n" RESET "  'b <lit>' lines followed by 'b 0' (disable with " YELLOW "-no-backbone" RESET \
 		 ")\n"
 

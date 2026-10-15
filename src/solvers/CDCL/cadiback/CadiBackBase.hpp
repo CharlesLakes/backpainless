@@ -135,6 +135,16 @@ class CadiBackBase
 	/// of solve() before each chunk, so every variant benefits from it.
 	void syncWithBoard(std::vector<int>& candidates);
 
+	/// @brief A fresh variable, above the formula and every variable already used in CaDiCaL (for an explore phase
+	/// that adds definitions, see explore).
+	int freshVariable();
+
+	/// @brief Makes the next CaDiCaL calls return 0 (unknown) once @p seconds have elapsed, until clearSolveDeadline.
+	/// Unlike an interrupt, @ref stopSolver stays false.
+	void setSolveDeadline(double seconds);
+
+	void clearSolveDeadline() { m_hasDeadline = false; }
+
 	/// @brief Size of the next chunk for the default selectChunk (SIZE_MAX when the chunk holds all candidates).
 	size_t m_chunkSize = 0;
 
@@ -241,6 +251,13 @@ class CadiBackBase
 	/// @brief Next clause to import (loaded in hasClauseToImport)
 	ClauseExchangePtr tempClauseToImport;
 
+	/// @brief Deadline of setSolveDeadline, only used by the solving thread
+	bool m_hasDeadline = false;
+	std::chrono::steady_clock::time_point m_deadline;
+
 	/*-----------------------Terminator----------------------*/
-	bool terminate() override { return this->stopSolver; }
+	bool terminate() override
+	{
+		return this->stopSolver || (m_hasDeadline && std::chrono::steady_clock::now() >= m_deadline);
+	}
 };

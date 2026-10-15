@@ -35,6 +35,7 @@ The following documentation is inherited from Painless and describes the shared 
 
 ### Backbone Solvers
 - `c`, **CadiBack**: the CadiBack algorithm on [CaDiCaL](https://github.com/arminbiere/cadical/tree/24d047563f5f4c9e37a74c04fa30059b2bbc4214) (v1.9.1).
+- `m`, **MaxSatBackbone**: rounds of MaxSAT with [EvalMaxSAT](https://github.com/FlorentAvellaneda/EvalMaxSAT/tree/94e677456cab96b2718f6da3f808bf694ac383d6) (header-only, vendored in `solvers/evalmaxsat/`, run on the same CaDiCaL): hard = formula, soft = the negation of every candidate, so that an optimum flips as many candidates as possible; a round whose optimum flips none proves that the candidates left are backbone (`-bb-maxsat-rounds`, `-bb-maxsat-patience`).
 
 The SAT solvers vendored by Painless are kept in `solvers/`, but they are not linked. They can be built individually (`make kissat`, `make solvers`, ...):
 - [Kissat](https://github.com/arminbiere/kissat/tree/71caafb4d182ced9f76cef45b00f37cc598f2a37) (v4.0.2), Kissat-MAB, Kissat-INC
@@ -98,6 +99,7 @@ The compiled binaries are located in:
 ```bash
 ./backpainless formula.cnf -c=8                  # 8 diversified CadiBack solvers sharing learnt clauses
 ./backpainless formula.cnf -c=4 -bb-chunk=1      # one-by-one candidate checking
+./backpainless formula.cnf -c=4 -solver=cm -bb-share-cand=1   # CadiBack and MaxSAT workers sharing decided variables
 ./backpainless -help                             # all options
 ./backpainless -details=Backbone                 # backbone options in detail
 mpirun -np 2 ./backpainless formula.cnf -dist -gshr-strat=1   # distributed mode
@@ -218,7 +220,7 @@ The analysis provides:
   [optional footer(s)]
   ```
   Common types are `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci` and `chore`. A breaking change is marked with `!` after the type/scope, or with a `BREAKING CHANGE:` footer. For example, `fix(solvers): disable CaDiCaL reimply for flippable checks`.
-- **Per-worker search options:** BackPainLess keeps the heterogeneous portfolio of Painless, where every worker shares with all the others whatever its configuration. An option of the backbone search must therefore be settable per worker: a comma-separated list or a mask cycled over the solver ids and assigned in `BackboneSolverFactory::diversification` (as `-solver`, `-bb-order`, `-bb-chunk`, `-bb-share-units`, `-bb-share-cand`), never a global value read inside `solve()`. A single value keeps meaning "the same for every worker".
+- **Per-worker search options:** BackPainLess keeps the heterogeneous portfolio of Painless, where every worker shares with all the others whatever its configuration. An option of the backbone search must therefore be settable per worker: a comma-separated list or a mask cycled over the solver ids and assigned in `BackboneSolverFactory::diversification` (as `-solver`, `-bb-order`, `-bb-chunk`, `-bb-share-units`, `-bb-share-cand`, `-bb-maxsat-*`), never a global value read inside `solve()`. A single value keeps meaning "the same for every worker".
 - **AI coding assistants** follow the rules of the Linux kernel [AI Coding Assistants](https://docs.kernel.org/process/coding-assistants.html) guide:
   - AI agents MUST NOT add `Signed-off-by` tags. Only the human submitter can certify the contribution.
   - The human submitter reviews all AI-generated code and takes full responsibility for it.
