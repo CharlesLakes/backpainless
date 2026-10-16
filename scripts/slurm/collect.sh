@@ -1,33 +1,56 @@
 #!/bin/bash
-# Summary of a bench.sbatch run: mean PAR-2 time (an unsolved run counts twice the timeout) and unsolved runs per
-# instance and portfolio, geometric mean speedup over the first portfolio, and an error when two runs give a different
-# answer for the same instance. Writes <dir>/results.tsv.
+# Summary of bench.sbatch experiments: mean PAR-2 time (an unsolved run counts twice the timeout) and unsolved runs per
+# instance and experiment, geometric mean speedup over the first experiment, the runs that crashed, and an error when
+# two runs give a different answer for the same instance. Writes <first dir>/results.tsv (all the rows).
 #
-# Usage: scripts/slurm/collect.sh runs/<job id> [number of tasks]
-#   with the number of tasks, also lists the missing ones and the command to run them
+# Usage: scripts/slurm/collect.sh runs/<campaign>            # every experiment of a campaign (submit.sh)
+#        scripts/slurm/collect.sh runs/<dir> [runs/<dir>...]  # given experiment dirs, the first is the baseline
+# A campaign is ordered cadiback, xor, maxsat, others, then by number of workers. The runs missing from a dir (still
+# running, time limit, failure) are listed with the command to run them.
 
 set -euo pipefail
 export LC_ALL=C
 
-dir=${1:?usage: collect.sh runs/<job id> [number of tasks]}
-total=${2:-}
+(($#)) || { echo "usage: collect.sh runs/<campaign> | runs/<dir>..." >&2; exit 1; }
+campaign=
+if (($# == 1)) && [[ ! -d $1/rows && ! -f $1/config.env ]]; then
+	campaign=$1
+	mapfile -t dirs < <(for d in "$1"/*/; do [[ -d $d/rows || -f $d/config.env ]] && echo "${d%/}"; done |
+		awk -F/ '{ n = $NF; e = n; sub(/-[0-9]+$/, "", e); w = n; sub(/.*-/, "", w)
+			r = e == "cadiback" ? 0 : e == "xor" ? 1 : e == "maxsat" ? 2 : 3
+			printf "%d\t%s\t%08d\t%s\n", r, e, w, $0 }' | sort | cut -f4)
+	((${#dirs[@]})) || { echo "no experiment in $1" >&2; exit 1; }
+else
+	dirs=("$@")
+fi
+out=${campaign:-${dirs[0]}}/results.tsv
 
 {
-	printf "task\tinstance\tportfolio\trep\texit\tstatus\tsolved\twall\tbb_size\tbb_hash\twinner\ttimeout\tnodes\n"
-	find "$dir/rows" -name '[0-9]*.tsv' -exec cat {} + | sort -n
-} >"$dir/results.tsv"
-echo "$(($(wc -l <"$dir/results.tsv") - 1)) tasks done, results in $dir/results.tsv"
+	printf "task\tinstance\texperiment\trep\texit\tstatus\tsolved\twall\tbb_size\tbb_hash\twinner\ttimeout\tnodes\n"
+	for d in "${dirs[@]}"; do
+		[[ -d $d/rows ]] && find "$d/rows" -name '[0-9]*.tsv' -exec cat {} + | sort -n
+	done
+} >"$out"
+echo "$(($(wc -l <"$out") - 1)) runs done, results in $out"
 
-if [[ -n $total ]]; then
-	missing=$(for ((i = 0; i < total; i++)); do [[ -f $dir/rows/$i.tsv ]] || echo $i; done | awk '
+for d in "${dirs[@]}"; do
+	total=
+	[[ -f $d/config.env ]] && total=$(sed -n 's/^total=//p' "$d/config.env")
+	if [[ -z $total ]]; then
+		echo "  $d: no config.env yet (job not started)"
+		continue
+	fi
+	missing=$(for ((i = 0; i < total; i++)); do [[ -f $d/rows/$i.tsv ]] || echo $i; done | awk '
 		NR == 1 { s = p = $1; next }
 		$1 == p + 1 { p = $1; next }
 		{ out = out (out ? "," : "") (s == p ? s : s "-" p); s = p = $1 }
 		END { if (NR) print out (out ? "," : "") (s == p ? s : s "-" p) }')
-	if [[ -n $missing ]]; then
-		echo "missing tasks: $missing (still running, time limit, or failed). To run them, with the same configuration:"
-		echo "  OUT=$dir bash scripts/slurm/bench.sbatch --submit"
-	fi
+	[[ -n $missing ]] && echo "  $d: missing runs $missing (still running, time limit, or failed)"
+done
+if [[ -n $campaign ]]; then
+	echo "  to run the missing ones, with the same configuration: CAMPAIGN=$(basename "$campaign") bash scripts/slurm/submit.sh --submit"
+else
+	echo "  to run the missing ones of a dir: (source <dir>/config.env; OUT=<dir> bash scripts/slurm/bench.sbatch --submit)"
 fi
 
 awk -F'\t' '
@@ -36,7 +59,8 @@ awk -F'\t' '
 	  if (!($3 in pseen)) { pseen[$3]; ports[++np] = $3 }
 	  k = $2 SUBSEP $3; t = $7 ? $8 : 2 * $12
 	  sum[k] += t; cnt[k]++; uns[k] += !$7; tot[$3] += t; tcnt[$3]++
-	  if ($5 == 124 || $5 == 137) hang = hang " " $1
+	  if ($5 == 124 || $5 == 137) hang = hang " " $3 ":" $1
+	  else if ($5 != 0 && $5 != 10 && $5 != 20) crash = crash " " $3 ":" $1 "(exit " $5 ")"
 	  if ($7) { a = $6 ":" $10; if (!(($2, a) in ans)) { ans[$2, a]; nans[$2]++; anss[$2] = anss[$2] " " a } } }
 	END {
 		w = 14; for (j = 1; j <= np; j++) if (length(ports[j]) > w) w = length(ports[j])
@@ -56,9 +80,10 @@ awk -F'\t' '
 				if (cnt[a] && cnt[b]) { r = (sum[a] / cnt[a]) / (sum[b] / cnt[b]); l += log(r); m++
 					better += r > 1.05; worse += r < 1 / 1.05 } }
 			if (m) printf "  %-*s x%.3f  (%d faster, %d slower by > 5%%, %d instances)\n", w, p, exp(l / m), better, worse, m }
+		if (crash) printf "\nWARNING runs that crashed (exit not 0/10/20, see logs/<task>.log of the experiment):%s\n", crash
 		if (hang) printf "\nWARNING runs killed after -t + 60 s (did not stop by themselves): tasks%s\n", hang
 		bad = 0
 		for (i in nans) if (nans[i] > 1) { if (!bad++) print "\nERROR different answers for the same instance (status:backbone hash):"
 			print "  " i ":" anss[i] }
 		exit bad > 0 }
-' "$dir/results.tsv"
+' "$out"

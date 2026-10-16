@@ -134,3 +134,7 @@ solvers/yalsat/yalsat
 config.status
 libtool
 solvers/cryptominisat/build/
+
+# Slurm benchmarks (scripts/slurm)
+runs/
+instances/
