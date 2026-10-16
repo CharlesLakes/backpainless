@@ -49,7 +49,7 @@ GSHR=${GSHR:-1}                             # -gshr-strat: 1 AllGather, 2 Mallob
 PARTITION=${PARTITION:-solver}              # must match --partition (time limit of the partition)
 ACCOUNT=${ACCOUNT:-solver}                  # must match --account
 LABEL=${LABEL:-$EXPERIMENT-$WORKERS}        # name of the experiment in the results
-SERIAL=${SERIAL:-1}                         # 1: --dependency=singleton, jobs of the same JOB_NAME run one at a time
+SERIAL=${SERIAL:-0}                         # 1: --dependency=singleton, jobs of the same JOB_NAME run one at a time
 JOB_NAME=${JOB_NAME:-backpainless}
 EXTRA_ARGS=${EXTRA_ARGS:-}                  # added to every run, e.g. "-bb-share-cand-local"
 RUN_SLACK=120 # seconds per run above TIMEOUT: kill after -t + 60 s (+10 s), MPI start and stop

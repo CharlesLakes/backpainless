@@ -8,9 +8,10 @@
 #   CAMPAIGN=<name> bash scripts/slurm/submit.sh --submit   # resumes a campaign: only the missing runs
 #
 # Configuration (environment): EXPERIMENTS, WORKERS_LIST, CAMPAIGN, plus every variable of bench.sbatch (INSTANCES,
-# REPS, TIMEOUT, CB_ORDERS, XOR_ROUNDS, ...), the same for every job. With SERIAL=1 (default) the jobs share a job
-# name and --dependency=singleton: they run one after the other, so that they never compete for nodes or memory
-# bandwidth; SERIAL=0 lets Slurm run them together.
+# REPS, TIMEOUT, CB_ORDERS, XOR_ROUNDS, ...), the same for every job. The jobs run at the same time as soon as Slurm
+# has the CPUs (inside a job, every worker of a run runs in parallel and shares with the others; two jobs never share,
+# so that each one measures its own configuration). SERIAL=1 runs them one after the other (same job name and
+# --dependency=singleton), so that they never compete for nodes or memory bandwidth.
 
 set -euo pipefail
 

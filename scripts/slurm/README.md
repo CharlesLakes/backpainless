@@ -106,8 +106,18 @@ The default campaign is 3 experiments × 3 worker counts = 9 jobs:
 With 4 CPUs per worker, 24 workers need 96 CPUs. Slurm places the workers wherever there are free CPUs: one per
 4-CPU node, or several on a larger node.
 
-By default the jobs of a campaign run **one after the other** (same job name and `--dependency=singleton`), so they
-never compete for nodes or memory bandwidth. `SERIAL=0` lets Slurm run them together.
+What runs in parallel:
+
+- **Inside a run**, all the workers of the experiment run at the same time and share learnt clauses, backbone units
+  and the candidate board through MPI, whether or not they are on the same node. This is the parallel portfolio being
+  studied.
+- **The jobs of a campaign** are submitted together, and Slurm runs them at the same time as soon as it has the CPUs.
+  Two jobs never share anything with each other: each one measures its own configuration (experiment and number of
+  workers), so the results can be compared.
+- **Inside a job**, the (instance, repetition) runs come one after the other, each run using all the workers.
+
+Jobs running at the same time can share a node and its memory bandwidth, which adds some noise to the times.
+`SERIAL=1` runs the jobs one after the other (same job name and `--dependency=singleton`) for cleaner timings.
 
 ### Configuration
 
@@ -127,7 +137,7 @@ REPS=1 TIMEOUT=300 WORKERS_LIST="8 16" EXPERIMENTS="cadiback xor" bash scripts/s
 | `TIMEOUT` | 900 | `-t` of each run, in seconds |
 | `PARTITION`, `ACCOUNT` | `solver`, `solver` | Slurm partition and account |
 | `CPUS` | 4 | CPUs per worker |
-| `SERIAL` | 1 | 1: the jobs of the campaign run one at a time |
+| `SERIAL` | 0 | 1: the jobs of the campaign run one at a time (cleaner timings, longer) |
 | `MIX` | per experiment | worker types cycled over the workers, e.g. `MIX=ccx` (overrides the experiment) |
 | `CB_ORDERS` | `natural random occ reverse occ-rev` | candidate orders (`-bb-order`) |
 | `CB_CHUNKS` | `0 10 1` | chunk sizes of the CadiBack workers (`-bb-chunk`: 0 all, 1 one by one, K geometric) |
