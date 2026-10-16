@@ -7,7 +7,7 @@ variables) through the global sharing strategy, whether or not they run on the s
 
 | File | Purpose |
 |---|---|
-| `submit.sh` | Submits a **campaign**: one job per (experiment, number of workers). |
+| `submit.sh` | Submits the configurations you choose (e.g. `xor-16`), one job each, grouped in a campaign. |
 | `bench.sbatch` | One job: one experiment with N workers, running every (instance, repetition) one after the other. |
 | `collect.sh` | Summary of a campaign or of some experiment directories. |
 
@@ -85,23 +85,35 @@ instance and broadcasts it, so the other nodes never touch the file.
 For a first test, a small instance with a non-empty backbone is the most useful: e.g. SATLIB `uf250-06.cnf` (backbone
 of 10 literals, a few seconds). `ais12.cnf` is a good speed test, but its backbone is empty (`b 0` only).
 
-## 4. Running a campaign
+## 4. Choosing and launching configurations
 
-Every command runs **from the repository root** on the login node.
+Every command runs **from the repository root** on the login node. A configuration is `<experiment>-<workers>`, and
+you choose which ones to launch:
+
+| Experiment | Worker types (round robin, split as evenly as possible) |
+|---|---|
+| `cadiback` | CadiBack (`c`) only |
+| `xor` | CadiBack + DiverseBackboneSearch (`c`, `x`), the `x` workers run many XOR rounds |
+| `maxsat` | CadiBack + DiverseBackboneSearch + MaxSAT (`c`, `x`, `m`) |
+| any other name | the worker types given by `MIX`, e.g. `MIX=ccxm mymix-16` |
 
 ```bash
 mkdir -p runs
-bash scripts/slurm/submit.sh                  # plan: every job, its runs, time limit and CPUs; nothing submitted
-bash scripts/slurm/submit.sh --submit         # submits the jobs
+bash scripts/slurm/submit.sh xor-16                        # plan: runs, time limit, CPUs; nothing submitted
+bash scripts/slurm/submit.sh --submit xor-16               # submits that configuration
+bash scripts/slurm/submit.sh --submit cadiback-8 xor-8     # several configurations, one job each
+MIX=ccxm bash scripts/slurm/submit.sh --submit mymix-16    # your own worker mix
 ```
 
-The default campaign is 3 experiments × 3 worker counts = 9 jobs:
+For example, the study cadiback → xor → maxsat with 8, 16 and 24 workers is nine configurations. Launch them all at
+once, or in steps with the same `CAMPAIGN` so that `collect.sh` compares them together:
 
-| Experiment | Worker types (round robin, split as evenly as possible) | Workers |
-|---|---|---|
-| `cadiback` | CadiBack (`c`) only | 8, 16, 24 |
-| `xor` | CadiBack + DiverseBackboneSearch (`c`, `x`), the `x` workers run many XOR rounds | 8, 16, 24 |
-| `maxsat` | CadiBack + DiverseBackboneSearch + MaxSAT (`c`, `x`, `m`) | 8, 16, 24 |
+```bash
+export CAMPAIGN=study1
+bash scripts/slurm/submit.sh --submit cadiback-8 cadiback-16 cadiback-24
+bash scripts/slurm/submit.sh --submit xor-8 xor-16 xor-24          # later, or right away
+bash scripts/slurm/submit.sh --submit maxsat-8 maxsat-16 maxsat-24
+```
 
 With 4 CPUs per worker, 24 workers need 96 CPUs. Slurm places the workers wherever there are free CPUs: one per
 4-CPU node, or several on a larger node.
@@ -111,7 +123,7 @@ What runs in parallel:
 - **Inside a run**, all the workers of the experiment run at the same time and share learnt clauses, backbone units
   and the candidate board through MPI, whether or not they are on the same node. This is the parallel portfolio being
   studied.
-- **The jobs of a campaign** are submitted together, and Slurm runs them at the same time as soon as it has the CPUs.
+- **The jobs you submit** run at the same time as soon as Slurm has the CPUs.
   Two jobs never share anything with each other: each one measures its own configuration (experiment and number of
   workers), so the results can be compared.
 - **Inside a job**, the (instance, repetition) runs come one after the other, each run using all the workers.
@@ -121,17 +133,16 @@ Jobs running at the same time can share a node and its memory bandwidth, which a
 
 ### Configuration
 
-Set the variables in front of the command. They apply to every job of the campaign:
+Set the variables in front of the command. They apply to every configuration of that command, and are recorded in
+`config.env` of each one:
 
 ```bash
-REPS=1 TIMEOUT=300 WORKERS_LIST="8 16" EXPERIMENTS="cadiback xor" bash scripts/slurm/submit.sh --submit
+REPS=1 TIMEOUT=300 XOR_ROUNDS=200 bash scripts/slurm/submit.sh --submit xor-16
 ```
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `EXPERIMENTS` | `cadiback xor maxsat` | experiments of the campaign |
-| `WORKERS_LIST` | `8 16 24` | numbers of workers (MPI ranks) |
-| `CAMPAIGN` | date and time | name of the campaign, results in `runs/<campaign>/` |
+| `CAMPAIGN` | date and time | name of the campaign, results in `runs/<campaign>/<configuration>/` |
 | `INSTANCES` | `instances` | directory of the instances |
 | `REPS` | 3 | repetitions of each instance |
 | `TIMEOUT` | 900 | `-t` of each run, in seconds |
@@ -165,7 +176,7 @@ table of workers to `workers.tsv`.
 
 ### A single experiment
 
-`bench.sbatch` runs one cell of the matrix and accepts the same variables:
+`submit.sh` calls `bench.sbatch` once per configuration; it can also be used directly, with the same variables:
 
 ```bash
 EXPERIMENT=xor WORKERS=16 bash scripts/slurm/bench.sbatch            # plan
@@ -179,11 +190,11 @@ EXPERIMENT=xor WORKERS=16 bash scripts/slurm/bench.sbatch --submit   # submit
 - **Per job:** `--time` = runs × (TIMEOUT + 120 s) + 300 s, capped to the time limit of the partition (with a warning
   that says how many runs fit). This is the worst case; a job ends as soon as its runs are done.
 - A run only starts if it can finish before the job's time limit. To run what is missing (time limit, failure,
-  cancelled job), submit again with the **same configuration and campaign name**: runs that already have a result
-  are skipped.
+  cancelled job), submit the configuration again with the **same variables and campaign name**: runs that already
+  have a result are skipped. `collect.sh` prints the exact command.
 
   ```bash
-  CAMPAIGN=<name> bash scripts/slurm/submit.sh --submit
+  CAMPAIGN=<name> bash scripts/slurm/submit.sh --submit xor-16
   ```
 
 ## 6. Monitoring and results
@@ -216,8 +227,9 @@ bash scripts/slurm/collect.sh runs/<campaign>
 It writes all the rows to `runs/<campaign>/results.tsv` and prints:
 
 - the mean PAR-2 time and the number of unsolved runs per instance and experiment (an unsolved run counts 2 × TIMEOUT);
-- the geometric mean speedup over the first experiment (`cadiback` with the fewest workers);
-- the missing runs and the command to run them;
+- the geometric mean speedup over the first configuration (ordered cadiback, xor, maxsat, others, then by number of
+  workers);
+- the missing runs and the command to run them (only the incomplete configurations);
 - the runs that crashed (exit code other than 0, 10, 20) and the runs killed after the timeout;
 - an **error** if two runs of the same instance give different answers (status or backbone hash).
 

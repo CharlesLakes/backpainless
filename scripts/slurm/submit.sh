@@ -1,31 +1,49 @@
 #!/bin/bash
-# Submits a benchmark campaign: one bench.sbatch job per (experiment, worker count), each worker with 4 CPUs.
-# Results in runs/<campaign>/<experiment>-<workers>/, summary with collect.sh runs/<campaign>.
+# Submits the configurations you choose, one bench.sbatch job each. A configuration is <experiment>-<workers>, each
+# worker with 4 CPUs:
+#   cadiback-<N>  only CadiBack workers (c)
+#   xor-<N>       CadiBack and DiverseBackboneSearch workers (c, x)
+#   maxsat-<N>    CadiBack, DiverseBackboneSearch and MaxSAT workers (c, x, m)
+#   <name>-<N>    any other name with MIX=<worker types>, e.g. MIX=ccxm mymix-16
+# Results in runs/<campaign>/<configuration>/, summary with collect.sh runs/<campaign>.
 #
 # Usage, from the repository root:
-#   bash scripts/slurm/submit.sh            # plan of every job (runs, time limit, CPUs), nothing submitted
-#   bash scripts/slurm/submit.sh --submit   # submits them
-#   CAMPAIGN=<name> bash scripts/slurm/submit.sh --submit   # resumes a campaign: only the missing runs
+#   bash scripts/slurm/submit.sh xor-16                      # plan of that job (runs, time limit, CPUs)
+#   bash scripts/slurm/submit.sh --submit xor-16             # submits it
+#   bash scripts/slurm/submit.sh --submit cadiback-8 xor-8   # several configurations, each its own job
+#   CAMPAIGN=<name> bash scripts/slurm/submit.sh --submit xor-16   # same campaign: only the missing runs
 #
-# Configuration (environment): EXPERIMENTS, WORKERS_LIST, CAMPAIGN, plus every variable of bench.sbatch (INSTANCES,
-# REPS, TIMEOUT, CB_ORDERS, XOR_ROUNDS, ...), the same for every job. The jobs run at the same time as soon as Slurm
-# has the CPUs (inside a job, every worker of a run runs in parallel and shares with the others; two jobs never share,
-# so that each one measures its own configuration). SERIAL=1 runs them one after the other (same job name and
-# --dependency=singleton), so that they never compete for nodes or memory bandwidth.
+# Every variable of bench.sbatch (INSTANCES, REPS, TIMEOUT, CB_ORDERS, XOR_ROUNDS, ...) can be set in the environment,
+# the same for every configuration of the call. The jobs run at the same time as soon as Slurm has the CPUs; SERIAL=1
+# runs the jobs of a campaign one after the other (same job name and --dependency=singleton).
 
 set -euo pipefail
 
-EXPERIMENTS=${EXPERIMENTS:-cadiback xor maxsat}
-WORKERS_LIST=${WORKERS_LIST:-8 16 24}
+usage() {
+	sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+	exit "${1:-0}"
+}
+
+submit=()
+configs=()
+for a; do
+	case $a in
+	--submit) submit=(--submit) ;;
+	-h | --help) usage ;;
+	*-[0-9]*) configs+=("$a") ;;
+	*) echo "invalid configuration '$a': expected <experiment>-<workers>, e.g. xor-16" >&2; exit 1 ;;
+	esac
+done
+((${#configs[@]})) || { echo "no configuration given" >&2; usage 1; }
+
 CAMPAIGN=${CAMPAIGN:-$(date +%Y%m%d-%H%M)}
 export JOB_NAME=${JOB_NAME:-bpl-$CAMPAIGN}
 
 here=$(dirname "$0")
-echo "campaign $CAMPAIGN: experiments '$EXPERIMENTS' x workers '$WORKERS_LIST' (results in runs/$CAMPAIGN)"
-for exp in $EXPERIMENTS; do
-	for n in $WORKERS_LIST; do
-		EXPERIMENT=$exp WORKERS=$n LABEL=$exp-$n OUT=runs/$CAMPAIGN/$exp-$n bash "$here/bench.sbatch" "$@"
-	done
+echo "campaign $CAMPAIGN (results in runs/$CAMPAIGN)"
+for c in "${configs[@]}"; do
+	exp=${c%-*} n=${c##*-}
+	EXPERIMENT=$exp WORKERS=$n LABEL=$c OUT=runs/$CAMPAIGN/$c bash "$here/bench.sbatch" "${submit[@]}"
 done
-[[ ${1:-} == --submit ]] || echo "nothing submitted: add --submit (resume later with CAMPAIGN=$CAMPAIGN)"
+((${#submit[@]})) || echo "nothing submitted: add --submit (resume later with CAMPAIGN=$CAMPAIGN)"
 echo "summary: bash $here/collect.sh runs/$CAMPAIGN"

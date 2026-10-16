@@ -33,6 +33,7 @@ out=${campaign:-${dirs[0]}}/results.tsv
 } >"$out"
 echo "$(($(wc -l <"$out") - 1)) runs done, results in $out"
 
+incomplete=()
 for d in "${dirs[@]}"; do
 	total=
 	[[ -f $d/config.env ]] && total=$(sed -n 's/^total=//p' "$d/config.env")
@@ -45,12 +46,18 @@ for d in "${dirs[@]}"; do
 		$1 == p + 1 { p = $1; next }
 		{ out = out (out ? "," : "") (s == p ? s : s "-" p); s = p = $1 }
 		END { if (NR) print out (out ? "," : "") (s == p ? s : s "-" p) }')
-	[[ -n $missing ]] && echo "  $d: missing runs $missing (still running, time limit, or failed)"
+	if [[ -n $missing ]]; then
+		echo "  $d: missing runs $missing (still running, time limit, or failed)"
+		incomplete+=("$(basename "$d")")
+	fi
 done
-if [[ -n $campaign ]]; then
-	echo "  to run the missing ones, with the same configuration: CAMPAIGN=$(basename "$campaign") bash scripts/slurm/submit.sh --submit"
-else
-	echo "  to run the missing ones of a dir: (source <dir>/config.env; OUT=<dir> bash scripts/slurm/bench.sbatch --submit)"
+if ((${#incomplete[@]})); then
+	if [[ -n $campaign ]]; then
+		echo "  to run the missing ones, with the same variables:" \
+			"CAMPAIGN=$(basename "$campaign") bash scripts/slurm/submit.sh --submit ${incomplete[*]}"
+	else
+		echo "  to run the missing ones of a dir: (source <dir>/config.env; OUT=<dir> bash scripts/slurm/bench.sbatch --submit)"
+	fi
 fi
 
 awk -F'\t' '

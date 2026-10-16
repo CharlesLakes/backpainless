@@ -3,7 +3,7 @@
 # workers, each worker one MPI rank (-dist, -c=1) with its own 4 CPUs (--cpus-per-task). The ranks exchange learnt
 # clauses, backbone units and the candidate board (backbone and free variables) through the global sharing. The job
 # runs the tasks (instance, repetition) one after the other, each task one MPI run over all the workers.
-# scripts/slurm/submit.sh submits the whole matrix (experiments x worker counts); this script runs one cell.
+# scripts/slurm/submit.sh submits the configurations you choose (e.g. xor-16), one job each, through this script.
 #
 # Experiments (worker types assigned round robin, so that they are split as evenly as possible):
 #   cadiback  only CadiBack workers (c)
