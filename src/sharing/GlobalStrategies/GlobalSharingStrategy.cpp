@@ -27,6 +27,22 @@ GlobalSharingStrategy::printStats()
 			gstats.receivedDuplicas,
 			gstats.sharedDuplicasAvoided,
 			gstats.messagesSent);
+	if (m_board)
+		LOGSTAT("Global Strategy: candidate board, %lu statuses received from other ranks", m_boardReceived);
+}
+
+void
+GlobalSharingStrategy::exchangeCandidateBoard()
+{
+	unsigned int nbVars = m_board->nbVars();
+	if (nbVars == 0)
+		return;
+	m_boardBuffer.resize(nbVars);
+	m_board->snapshot(m_boardBuffer.data());
+	TESTRUNMPI(MPI_Allreduce(MPI_IN_PLACE, m_boardBuffer.data(), nbVars, MPI_INT8_T, MPI_MAX, MPI_COMM_WORLD));
+	unsigned int added = m_board->merge(m_boardBuffer.data());
+	m_boardReceived += added;
+	LOGDEBUG1("[GStrat] candidate board: %u statuses received", added);
 }
 
 std::chrono::microseconds
@@ -107,6 +123,10 @@ GlobalSharingStrategy::doSharing()
 	MPI_Status status;
 
 	int receivedFinalResultBcast = 0;
+
+	/* Before the end detection, on every rank and at every round, so that the collective calls match */
+	if (m_board)
+		exchangeCandidateBoard();
 
 	if (globalEnding && !requests_sent && mpi_rank != MY_MPI_ROOT) {
 		LOGDEBUG1("[GStrat] It is the end, now I will send end to the root %d",(int)finalResult.load());

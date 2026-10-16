@@ -34,19 +34,23 @@ class BackboneSolverFactory
 
 	/**
 	 * @brief Creates 'count' solvers by cycling through the characters of 'portfolio'.
+	 * @param firstId Global id of the first solver (rank * count with MPI): the portfolio is indexed by the global id,
+	 * like the other per-worker options.
 	 */
 	static void createSolvers(int count,
 							  char importDBType,
 							  const std::string& portfolio,
-							  std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers);
+							  std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers,
+							  int firstId = 0);
 
 	/// @brief Prints the statistics table of the solvers.
 	static void printStats(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers);
 
 	/// @brief Creates the board of decided variables and connects the solvers selected by -bb-share-cand, by global
-	/// id (call after diversification). Does nothing when every worker has mode 0.
-	static void connectCandidateBoard(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers,
-									  unsigned int nbVars);
+	/// id (call after diversification). Returns the board, nullptr when every worker has mode 0.
+	static std::shared_ptr<CandidateBoard> connectCandidateBoard(
+		const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers,
+		unsigned int nbVars);
 
 	/// @brief Sets the ids of the solvers using the scalers, then calls their native diversification.
 	static void diversification(

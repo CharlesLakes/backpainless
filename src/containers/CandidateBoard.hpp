@@ -18,6 +18,9 @@
  * A status only goes from unknown to a final value, the first writer wins. Every model found by a solver, even under
  * a chunk constraint, is a model of the formula, so the statuses published by any solver are sound for all of them.
  * Memory order is relaxed: a status carries no other data and reading it late only costs a SAT call.
+ *
+ * With -dist the board of every process is exchanged by the global sharing strategy (snapshot / merge, a reduction
+ * with MPI_MAX: two ranks never disagree on a final status), unless -bb-share-cand-local is set.
  */
 class CandidateBoard
 {
@@ -54,6 +57,25 @@ class CandidateBoard
 
 	/// @brief Value returned by status() for a variable without backbone literal (never a valid literal).
 	static constexpr int FREE = 0x7fffffff;
+
+	unsigned int nbVars() const { return m_nbVars; }
+
+	/// @brief Copies the raw statuses of the variables 1..nbVars into @p out[0..nbVars-1] (0 = unknown).
+	void snapshot(int8_t* out) const
+	{
+		for (unsigned int v = 1; v <= m_nbVars; v++)
+			out[v - 1] = m_status[v].load(std::memory_order_relaxed);
+	}
+
+	/// @brief Publishes the known statuses of @p in (a snapshot of another board). Returns the number of new ones.
+	unsigned int merge(const int8_t* in)
+	{
+		unsigned int added = 0;
+		for (unsigned int v = 1; v <= m_nbVars; v++)
+			if (in[v - 1] != UNKNOWN && publish(v, in[v - 1]))
+				added++;
+		return added;
+	}
 
   private:
 	enum : int8_t

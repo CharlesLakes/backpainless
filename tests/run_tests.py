@@ -533,7 +533,12 @@ def suite_mpi(opts, report, workdir):
     path = os.path.join(workdir, "mpi.cnf")
     write_cnf(path, n, clauses)
     is_sat, backbone = oracle_backbone(n, clauses, workdir)
-    for extra in (["-gshr-strat=1"], ["-gshr-strat=2"], ["-gshr-strat=3"], ["-gshr-strat=1", "-bb-share-units=10"]):
+    # the candidate board is exchanged across ranks unless -bb-share-cand-local; -c=1: one worker per rank, the
+    # board only reaches the other workers through MPI
+    for extra in (["-gshr-strat=1"], ["-gshr-strat=2"], ["-gshr-strat=3"], ["-gshr-strat=1", "-bb-share-units=10"],
+                  ["-gshr-strat=1", "-bb-share-cand=1"], ["-gshr-strat=2", "-bb-share-cand=1c"],
+                  ["-gshr-strat=3", "-bb-share-cand=1", "-c=1", "-solver=csm"],
+                  ["-gshr-strat=1", "-bb-share-cand=1", "-bb-share-cand-local"]):
         run = run_backpainless(opts.binary, path, ["-c=2", "-dist", *extra, *SHARING_FAST],
                                launcher=(mpirun, "--oversubscribe", "-np", "3"))
         error = check_run(run, is_sat, backbone)
