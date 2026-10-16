@@ -7,8 +7,8 @@ variables) through the global sharing strategy, whether or not they run on the s
 
 | File | Purpose |
 |---|---|
-| `submit.sh` | Submits the configurations you choose (e.g. `xor-16`), one job each, grouped in a campaign. |
-| `bench.sbatch` | One job: one experiment with N workers, running every (instance, repetition) one after the other. |
+| `submit.sh` | Submits the configurations you choose (e.g. `maxsat-24`), one job each, grouped in a campaign. |
+| `bench.sbatch` | One job: one configuration, running every (instance, repetition) one after the other. |
 | `collect.sh` | Summary of a campaign or of some experiment directories. |
 
 The instructions assume what most research clusters provide: a home or project directory **shared by the login and
@@ -85,53 +85,116 @@ instance and broadcasts it, so the other nodes never touch the file.
 For a first test, a small instance with a non-empty backbone is the most useful: e.g. SATLIB `uf250-06.cnf` (backbone
 of 10 literals, a few seconds). `ais12.cnf` is a good speed test, but its backbone is empty (`b 0` only).
 
-## 4. Choosing and launching configurations
+## 4. Configurations
 
-Every command runs **from the repository root** on the login node. A configuration is `<experiment>-<workers>`, and
-you choose which ones to launch:
+A **configuration** is a portfolio of workers, named `<experiment>-<workers>`. The experiment determines the worker
+types and the number determines the total number of workers. The types are assigned round robin (`c, x, m, c, x, m,
+...`), so the workers are split among the types as evenly as possible:
 
-| Experiment | Worker types (round robin, split as evenly as possible) |
-|---|---|
-| `cadiback` | CadiBack (`c`) only |
-| `xor` | CadiBack + DiverseBackboneSearch (`c`, `x`), the `x` workers run many XOR rounds |
-| `maxsat` | CadiBack + DiverseBackboneSearch + MaxSAT (`c`, `x`, `m`) |
-| any other name | the worker types given by `MIX`, e.g. `MIX=ccxm mymix-16` |
+| Experiment | Worker types | 8 workers | 16 workers | 24 workers |
+|---|---|---|---|---|
+| `cadiback` | CadiBack (`c`) | 8 c | 16 c | 24 c |
+| `xor` | CadiBack, DiverseBackboneSearch (`c`, `x`) | 4 c, 4 x | 8 c, 8 x | 12 c, 12 x |
+| `maxsat` | CadiBack, DiverseBackboneSearch, MaxSAT (`c`, `x`, `m`) | 3 c, 3 x, 2 m | 6 c, 5 x, 5 m | 8 c, 8 x, 8 m |
+| any other name | the types given by `MIX`, e.g. `MIX=ccxm mymix-16` | | | |
+
+The `x` workers are configured for a long exploration: 1000 XOR rounds, and a round is never abandoned
+(`XOR_ROUNDS`, `XOR_PATIENCE`).
+
+### What the workers of a configuration share
+
+A configuration is executed as **one MPI run**: all its workers run at the same time and cooperate, whether or not
+they are on the same node.
+
+| Information | `c` (CadiBack) | `x` (XOR) | `m` (MaxSAT) |
+|---|---|---|---|
+| Learnt clauses: exported | yes | no, by default (`-bb-xor-export=0`) | yes |
+| Learnt clauses: imported | yes | yes | yes |
+| Backbone literals (unit clauses) | yes | yes | yes |
+| Candidate board: backbone and free variables | yes | yes | yes |
+
+The candidate board is what carries the non-backbone information. A worker that finds a model publishes the free
+variables it proves, and every other worker drops them from its candidates. With `-dist` the board is merged across
+all MPI ranks at every round of the global sharing. The `x` workers mostly contribute through the board, since the
+XOR exploration yields models that are very different from each other. They do not export their learnt clauses by
+default, because CryptoMiniSat gives no glue and these clauses slowed down the CadiBack workers in earlier
+measurements.
+
+## 5. Running a configuration
+
+Every command runs **from the repository root** on the login node. The following example runs `maxsat-24`: 8
+CadiBack, 8 XOR and 8 MaxSAT workers, 96 CPUs in total.
+
+1. Inspect the plan. Nothing is submitted; the plan shows the number of runs, the computed time limit and the number
+   of CPUs requested:
+
+   ```bash
+   mkdir -p runs
+   bash scripts/slurm/submit.sh maxsat-24
+   ```
+
+2. Submit it. The output gives the name of the campaign (the date and time by default, or `CAMPAIGN`):
+
+   ```bash
+   bash scripts/slurm/submit.sh --submit maxsat-24
+   ```
+
+3. Follow the job:
+
+   ```bash
+   squeue -u $USER
+   tail -f runs/<campaign>/maxsat-24/slurm-*.out
+   ```
+
+4. Read the results once it has finished (see section 7):
+
+   ```bash
+   bash scripts/slurm/collect.sh runs/<campaign>
+   cat runs/<campaign>/maxsat-24/workers.tsv                 # type and options of every worker
+   grep -E '^(s |b )' runs/<campaign>/maxsat-24/logs/0.log   # backbone found by the first run
+   ```
+
+By default every instance of `instances/` is run 3 times with a timeout of 900 s. For a first test, reduce the run:
 
 ```bash
-mkdir -p runs
-bash scripts/slurm/submit.sh xor-16                        # plan: runs, time limit, CPUs; nothing submitted
-bash scripts/slurm/submit.sh --submit xor-16               # submits that configuration
-bash scripts/slurm/submit.sh --submit cadiback-8 xor-8     # several configurations, one job each
-MIX=ccxm bash scripts/slurm/submit.sh --submit mymix-16    # your own worker mix
+REPS=1 TIMEOUT=300 bash scripts/slurm/submit.sh --submit maxsat-24
 ```
 
-For example, the study cadiback → xor → maxsat with 8, 16 and 24 workers is nine configurations. Launch them all at
-once, or in steps with the same `CAMPAIGN` so that `collect.sh` compares them together:
+### Several configurations at the same time
+
+Several configurations can be given to one command. Each one becomes a **separate job**, and the jobs run at the same
+time as soon as Slurm has the CPUs:
+
+```bash
+bash scripts/slurm/submit.sh --submit cadiback-24 xor-24
+```
+
+- The configurations are independent: workers of different configurations never share anything, so each job measures
+  its own portfolio and the results can be compared.
+- Running together requires the CPUs of all of them, e.g. 2 × 96 = 192 CPUs for the command above. If the partition
+  does not have them free, Slurm starts what fits and keeps the other jobs pending (reason `Resources`) until CPUs are
+  released. Nothing has to be resubmitted.
+- Jobs running at the same time may share a node and its memory bandwidth, which adds some noise to the times.
+  `SERIAL=1` runs the jobs one after the other (same job name and `--dependency=singleton`) for cleaner timings.
+- Inside a job, the runs (instance, repetition) are executed one after the other, each one using all the workers.
+
+### A study
+
+A study compares configurations, e.g. the three experiments with 8, 16 and 24 workers. Use the same `CAMPAIGN` so
+that `collect.sh` puts them in one table; the configurations can be submitted at once or in steps:
 
 ```bash
 export CAMPAIGN=study1
 bash scripts/slurm/submit.sh --submit cadiback-8 cadiback-16 cadiback-24
-bash scripts/slurm/submit.sh --submit xor-8 xor-16 xor-24          # later, or right away
+bash scripts/slurm/submit.sh --submit xor-8 xor-16 xor-24
 bash scripts/slurm/submit.sh --submit maxsat-8 maxsat-16 maxsat-24
+bash scripts/slurm/collect.sh runs/study1
 ```
 
 With 4 CPUs per worker, 24 workers need 96 CPUs. Slurm places the workers wherever there are free CPUs: one per
 4-CPU node, or several on a larger node.
 
-What runs in parallel:
-
-- **Inside a run**, all the workers of the experiment run at the same time and share learnt clauses, backbone units
-  and the candidate board through MPI, whether or not they are on the same node. This is the parallel portfolio being
-  studied.
-- **The jobs you submit** run at the same time as soon as Slurm has the CPUs.
-  Two jobs never share anything with each other: each one measures its own configuration (experiment and number of
-  workers), so the results can be compared.
-- **Inside a job**, the (instance, repetition) runs come one after the other, each run using all the workers.
-
-Jobs running at the same time can share a node and its memory bandwidth, which adds some noise to the times.
-`SERIAL=1` runs the jobs one after the other (same job name and `--dependency=singleton`) for cleaner timings.
-
-### Configuration
+### Options
 
 Set the variables in front of the command. They apply to every configuration of that command, and are recorded in
 `config.env` of each one:
@@ -162,7 +225,7 @@ REPS=1 TIMEOUT=300 XOR_ROUNDS=200 bash scripts/slurm/submit.sh --submit xor-16
 | `EXTRA_ARGS` | | added to every run, e.g. `-bb-share-cand-local` |
 | `LAUNCHER` | `mpirun --bind-to none -np N` | e.g. `srun --mpi=pmix` if the cluster's MPI requires `srun` |
 
-### Worker configurations
+### Options of each worker
 
 Inside a type, the configuration changes from one worker to the next. Two option lists are combined so that both
 change at every worker, and every pair appears once before any repeats:
@@ -174,7 +237,7 @@ change at every worker, and every pair appears once before any repeats:
 Beyond that, the configurations repeat with different seeds (the CaDiCaL seed is the worker id). Each job writes its
 table of workers to `workers.tsv`.
 
-### A single experiment
+### Using bench.sbatch directly
 
 `submit.sh` calls `bench.sbatch` once per configuration; it can also be used directly, with the same variables:
 
@@ -183,7 +246,7 @@ EXPERIMENT=xor WORKERS=16 bash scripts/slurm/bench.sbatch            # plan
 EXPERIMENT=xor WORKERS=16 bash scripts/slurm/bench.sbatch --submit   # submit
 ```
 
-## 5. Time limits and resuming
+## 6. Time limits and resuming
 
 - **Per run:** `-t=TIMEOUT`. A run reaching it prints `s UNKNOWN` and counts as unsolved. A run that does not stop is
   killed 60 s later.
@@ -197,7 +260,7 @@ EXPERIMENT=xor WORKERS=16 bash scripts/slurm/bench.sbatch --submit   # submit
   CAMPAIGN=<name> bash scripts/slurm/submit.sh --submit xor-16
   ```
 
-## 6. Monitoring and results
+## 7. Monitoring and results
 
 ```bash
 squeue -u $USER -o "%i %j %T %M %l %D %R"     # jobs: state, elapsed, limit, nodes, reason
