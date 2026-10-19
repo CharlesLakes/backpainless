@@ -41,8 +41,9 @@ export LC_ALL=C
 EXPERIMENT=${EXPERIMENT:-cadiback}
 WORKERS=${SLURM_NTASKS:-${WORKERS:-8}}       # workers = MPI ranks; in the job: given by sbatch --ntasks
 CPUS=${SLURM_CPUS_PER_TASK:-${CPUS:-4}}     # CPUs of each worker (one solver thread, the rest for sharing and MPI)
+MEM_PER_CPU=${MEM_PER_CPU:-3900M}           # --mem-per-cpu: memory of a worker = MEM_PER_CPU x CPUS (15.6 GB)
 INSTANCES=${INSTANCES:-instances}           # directory with *.cnf / *.cnf.xz / *.cnf.gz / *.cnf.bz2
-REPS=${REPS:-3}
+REPS=${REPS:-1}
 TIMEOUT=${TIMEOUT:-900}                     # -t of backpainless, seconds
 BINARY=${BINARY:-./backpainless}
 GSHR=${GSHR:-1}                             # -gshr-strat: 1 AllGather, 2 Mallob, 3 ring
@@ -154,7 +155,7 @@ if [[ -z ${SLURM_JOB_ID:-} ]]; then
 	echo "$LABEL ($MIX): ${#files[@]} instances x $REPS reps = $total runs, $pending to do in $OUT"
 	((pending)) || exit 0
 	limit=$((pending * (TIMEOUT + RUN_SLACK) + JOB_SLACK))
-	echo "  $WORKERS workers x $CPUS CPUs, -t=$TIMEOUT per run: time limit $(to_hms $limit)"
+	echo "  $WORKERS workers x $CPUS CPUs x $MEM_PER_CPU per CPU, -t=$TIMEOUT per run: time limit $(to_hms $limit)"
 	if command -v sinfo >/dev/null; then
 		max=$(to_secs "$(sinfo -h -p "$PARTITION" -o '%l' | head -1)")
 		if ((max >= 0 && limit > max)); then
@@ -168,7 +169,7 @@ if [[ -z ${SLURM_JOB_ID:-} ]]; then
 		echo "  $((WORKERS * CPUS)) CPUs asked, $idle idle of $all in $PARTITION"
 	fi
 	cmd=(sbatch --job-name="$JOB_NAME" --partition="$PARTITION" --account="$ACCOUNT" --ntasks="$WORKERS"
-		--cpus-per-task="$CPUS" --time="$(to_hms $limit)" --output="$OUT/slurm-%j.out")
+		--cpus-per-task="$CPUS" --mem-per-cpu="$MEM_PER_CPU" --time="$(to_hms $limit)" --output="$OUT/slurm-%j.out")
 	((SERIAL)) && cmd+=(--dependency=singleton)
 	cmd+=("$0")
 	echo "  EXPERIMENT=$EXPERIMENT OUT=$OUT ${cmd[*]}"
@@ -189,7 +190,7 @@ left=$(to_secs "$(squeue -h -j "$SLURM_JOB_ID" -o '%L' 2>/dev/null || true)")
 deadline=$((SECONDS + (left >= 0 ? left : 1 << 30)))
 worker_table >"$OUT/workers.tsv"
 {
-	for v in EXPERIMENT LABEL MIX WORKERS CPUS INSTANCES REPS TIMEOUT GSHR BINARY CB_ORDERS CB_CHUNKS XOR_MS \
+	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_CPU INSTANCES REPS TIMEOUT GSHR BINARY CB_ORDERS CB_CHUNKS XOR_MS \
 		XOR_DENSITIES XOR_ROUNDS XOR_PATIENCE XOR_CONFL MAXSAT_ROUNDS EXTRA_ARGS total; do
 		printf '%s=%q\n' "$v" "${!v}"
 	done

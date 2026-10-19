@@ -154,10 +154,11 @@ CadiBack, 8 XOR and 8 MaxSAT workers, 96 CPUs in total.
    grep -E '^(s |b )' runs/<campaign>/maxsat-24/logs/0.log   # backbone found by the first run
    ```
 
-By default every instance of `instances/` is run 3 times with a timeout of 900 s. For a first test, reduce the run:
+By default every instance of `instances/` is run once, with a timeout of 900 s per run. For a first test, reduce the
+timeout:
 
 ```bash
-REPS=1 TIMEOUT=300 bash scripts/slurm/submit.sh --submit maxsat-24
+TIMEOUT=300 bash scripts/slurm/submit.sh --submit maxsat-24
 ```
 
 ### Several configurations at the same time
@@ -200,17 +201,18 @@ Set the variables in front of the command. They apply to every configuration of 
 `config.env` of each one:
 
 ```bash
-REPS=1 TIMEOUT=300 XOR_ROUNDS=200 bash scripts/slurm/submit.sh --submit xor-16
+TIMEOUT=300 MEM_PER_CPU=2G XOR_ROUNDS=200 bash scripts/slurm/submit.sh --submit xor-16
 ```
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `CAMPAIGN` | date and time | name of the campaign, results in `runs/<campaign>/<configuration>/` |
 | `INSTANCES` | `instances` | directory of the instances |
-| `REPS` | 3 | repetitions of each instance |
-| `TIMEOUT` | 900 | `-t` of each run, in seconds |
+| `REPS` | 1 | runs of each instance (repetitions use the same seeds and only measure the noise of the parallel run) |
+| `TIMEOUT` | 900 | time limit of each run (one instance), in seconds: `-t` of backpainless |
 | `PARTITION`, `ACCOUNT` | `solver`, `solver` | Slurm partition and account |
 | `CPUS` | 4 | CPUs per worker |
+| `MEM_PER_CPU` | `3900M` | memory per CPU (`--mem-per-cpu`): a worker gets `MEM_PER_CPU` × `CPUS`, 15.6 GB by default |
 | `SERIAL` | 0 | 1: the jobs of the campaign run one at a time (cleaner timings, longer) |
 | `MIX` | per experiment | worker types cycled over the workers, e.g. `MIX=ccx` (overrides the experiment) |
 | `CB_ORDERS` | `natural random occ reverse occ-rev` | candidate orders (`-bb-order`) |
@@ -317,4 +319,5 @@ grep -E '^(s |b )' runs/<campaign>/<experiment>-<N>/logs/<task>.log
   binary outside the shared directory.
 - **Job pending with reason `Resources`**: the partition does not have `WORKERS × 4` free CPUs. Use fewer workers or
   wait. `PartitionTimeLimit`: lower `TIMEOUT` or `REPS`.
-- **Out of memory**: the job asks for 3900 MB per CPU (`--mem-per-cpu` in `bench.sbatch`), about 15.6 GB per worker.
+- **Out of memory** (state `OUT_OF_MEMORY`, or exit 137 in a run): raise `MEM_PER_CPU`, e.g. `MEM_PER_CPU=8G`. A
+  request above the memory of a node keeps the job pending: on a 4-CPU node with ~15.8 GB, 3900M is the maximum.
