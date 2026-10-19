@@ -27,7 +27,8 @@
 #SBATCH --account=solver
 #SBATCH --ntasks=8
 #SBATCH --cpus-per-task=4
-#SBATCH --mem-per-cpu=3900M
+#SBATCH --mem-per-cpu=3840M
+#SBATCH --exclude=node906,node907
 #SBATCH --time=00:20:00
 
 set -euo pipefail
@@ -41,7 +42,8 @@ export LC_ALL=C
 EXPERIMENT=${EXPERIMENT:-cadiback}
 WORKERS=${SLURM_NTASKS:-${WORKERS:-8}}       # workers = MPI ranks; in the job: given by sbatch --ntasks
 CPUS=${SLURM_CPUS_PER_TASK:-${CPUS:-4}}     # CPUs of each worker (one solver thread, the rest for sharing and MPI)
-MEM_PER_CPU=${MEM_PER_CPU:-3900M}           # --mem-per-cpu: memory of a worker = MEM_PER_CPU x CPUS (15.6 GB)
+MEM_PER_WORKER=${MEM_PER_WORKER:-15G}       # memory of each worker, asked as --mem-per-cpu = MEM_PER_WORKER / CPUS
+EXCLUDE=${EXCLUDE-node906,node907}          # --exclude: nodes never used (empty: none)
 INSTANCES=${INSTANCES:-instances}           # directory with *.cnf / *.cnf.xz / *.cnf.gz / *.cnf.bz2
 REPS=${REPS:-1}
 TIMEOUT=${TIMEOUT:-900}                     # -t of backpainless, seconds
@@ -139,6 +141,15 @@ done_task() { [[ -n ${OUT:-} && -f $OUT/rows/$1.tsv ]]; }
 pending=0
 for ((t = 0; t < total; t++)); do done_task $t || pending=$((pending + 1)); done
 
+# MEM_PER_WORKER (<n>[K|M|G|T], Slurm units, M by default) / CPUS -> --mem-per-cpu in MB
+mem_per_cpu() {
+	awk -v m="$MEM_PER_WORKER" -v c="$CPUS" 'BEGIN {
+		u = toupper(substr(m, length(m))); n = m + 0
+		f = u == "K" ? 1 / 1024 : u == "G" ? 1024 : u == "T" ? 1024 * 1024 : 1
+		if (n <= 0) exit 1; printf "%dM", n * f / c }'
+}
+MEM_PER_CPU=$(mem_per_cpu) || { echo "invalid MEM_PER_WORKER=$MEM_PER_WORKER" >&2; exit 1; }
+
 # Slurm durations ([D-]HH:MM:SS, MM:SS, ...) <-> seconds
 to_secs() {
 	awk -v d="$1" 'BEGIN { if (d == "" || d ~ /^(UNLIMITED|INVALID|infinite)$/) { print -1; exit }
@@ -155,7 +166,8 @@ if [[ -z ${SLURM_JOB_ID:-} ]]; then
 	echo "$LABEL ($MIX): ${#files[@]} instances x $REPS reps = $total runs, $pending to do in $OUT"
 	((pending)) || exit 0
 	limit=$((pending * (TIMEOUT + RUN_SLACK) + JOB_SLACK))
-	echo "  $WORKERS workers x $CPUS CPUs x $MEM_PER_CPU per CPU, -t=$TIMEOUT per run: time limit $(to_hms $limit)"
+	echo "  $WORKERS workers x ($CPUS CPUs, $MEM_PER_WORKER = $CPUS x $MEM_PER_CPU), -t=$TIMEOUT per run: time limit" \
+		"$(to_hms $limit)${EXCLUDE:+, excluding $EXCLUDE}"
 	if command -v sinfo >/dev/null; then
 		max=$(to_secs "$(sinfo -h -p "$PARTITION" -o '%l' | head -1)")
 		if ((max >= 0 && limit > max)); then
@@ -164,12 +176,16 @@ if [[ -z ${SLURM_JOB_ID:-} ]]; then
 			limit=$max
 		fi
 		# CPUs of the partition: allocated/idle/other/total
-		read -r _ idle _ all < <(sinfo -h -p "$PARTITION" -o '%C' | tr / ' ')
+		# CPUs of the nodes that are not excluded: all of them, and those of idle nodes
+		read -r all idle < <(sinfo -h -N -p "$PARTITION" -o '%N %c %t' |
+			awk -v ex=",$EXCLUDE," 'index(ex, "," $1 ",") == 0 && !seen[$1]++ { a += $2; if ($3 == "idle") i += $2 }
+				END { print a + 0, i + 0 }')
 		((WORKERS * CPUS <= all)) || { echo "  ERROR $((WORKERS * CPUS)) CPUs asked, $all in $PARTITION" >&2; exit 1; }
-		echo "  $((WORKERS * CPUS)) CPUs asked, $idle idle of $all in $PARTITION"
+		echo "  $((WORKERS * CPUS)) CPUs asked, $idle on idle nodes, $all in $PARTITION"
 	fi
 	cmd=(sbatch --job-name="$JOB_NAME" --partition="$PARTITION" --account="$ACCOUNT" --ntasks="$WORKERS"
 		--cpus-per-task="$CPUS" --mem-per-cpu="$MEM_PER_CPU" --time="$(to_hms $limit)" --output="$OUT/slurm-%j.out")
+	[[ -n $EXCLUDE ]] && cmd+=(--exclude="$EXCLUDE")
 	((SERIAL)) && cmd+=(--dependency=singleton)
 	cmd+=("$0")
 	echo "  EXPERIMENT=$EXPERIMENT OUT=$OUT ${cmd[*]}"
@@ -190,7 +206,7 @@ left=$(to_secs "$(squeue -h -j "$SLURM_JOB_ID" -o '%L' 2>/dev/null || true)")
 deadline=$((SECONDS + (left >= 0 ? left : 1 << 30)))
 worker_table >"$OUT/workers.tsv"
 {
-	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_CPU INSTANCES REPS TIMEOUT GSHR BINARY CB_ORDERS CB_CHUNKS XOR_MS \
+	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_WORKER MEM_PER_CPU EXCLUDE INSTANCES REPS TIMEOUT GSHR BINARY CB_ORDERS CB_CHUNKS XOR_MS \
 		XOR_DENSITIES XOR_ROUNDS XOR_PATIENCE XOR_CONFL MAXSAT_ROUNDS EXTRA_ARGS total; do
 		printf '%s=%q\n' "$v" "${!v}"
 	done

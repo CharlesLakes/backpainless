@@ -1,8 +1,8 @@
 # Distributed benchmarks on a Slurm cluster
 
 These scripts run BackPainLess portfolios on a Slurm cluster with MPI (`-dist`). Each **worker** is one MPI rank
-running one solver thread (`-c=1`) on its own **4 CPUs** (`--cpus-per-task=4`). The spare CPUs go to the sharing
-threads and MPI. The workers exchange learnt clauses, backbone units and the candidate board (backbone and free
+running one solver thread (`-c=1`) on its own **4 CPUs** (`--cpus-per-task=4`) and **15 GB** of memory. The spare CPUs
+go to the sharing threads and MPI. The workers exchange learnt clauses, backbone units and the candidate board (backbone and free
 variables) through the global sharing strategy, whether or not they run on the same node.
 
 | File | Purpose |
@@ -192,8 +192,10 @@ bash scripts/slurm/submit.sh --submit maxsat-8 maxsat-16 maxsat-24
 bash scripts/slurm/collect.sh runs/study1
 ```
 
-With 4 CPUs per worker, 24 workers need 96 CPUs. Slurm places the workers wherever there are free CPUs: one per
-4-CPU node, or several on a larger node.
+With 4 CPUs per worker, 24 workers need 96 CPUs. Slurm places the workers on the nodes that are not excluded
+(`EXCLUDE`, `node906,node907` by default) wherever there are free CPUs and memory. On the `solver` partition this
+leaves the 4-CPU nodes node910-927: one worker per node, so at most 18 workers in total (18 × 4 = 72 CPUs). A larger
+configuration is refused by the plan; `EXCLUDE=` allows the excluded nodes again.
 
 ### Options
 
@@ -201,7 +203,7 @@ Set the variables in front of the command. They apply to every configuration of 
 `config.env` of each one:
 
 ```bash
-TIMEOUT=300 MEM_PER_CPU=2G XOR_ROUNDS=200 bash scripts/slurm/submit.sh --submit xor-16
+TIMEOUT=300 MEM_PER_WORKER=8G XOR_ROUNDS=200 bash scripts/slurm/submit.sh --submit xor-16
 ```
 
 | Variable | Default | Meaning |
@@ -212,7 +214,8 @@ TIMEOUT=300 MEM_PER_CPU=2G XOR_ROUNDS=200 bash scripts/slurm/submit.sh --submit 
 | `TIMEOUT` | 900 | time limit of each run (one instance), in seconds: `-t` of backpainless |
 | `PARTITION`, `ACCOUNT` | `solver`, `solver` | Slurm partition and account |
 | `CPUS` | 4 | CPUs per worker |
-| `MEM_PER_CPU` | `3900M` | memory per CPU (`--mem-per-cpu`): a worker gets `MEM_PER_CPU` × `CPUS`, 15.6 GB by default |
+| `MEM_PER_WORKER` | `15G` | memory of each worker, requested as `--mem-per-cpu` = `MEM_PER_WORKER` / `CPUS` (3840M) |
+| `EXCLUDE` | `node906,node907` | nodes never used (`--exclude`); `EXCLUDE=` uses every node of the partition |
 | `SERIAL` | 0 | 1: the jobs of the campaign run one at a time (cleaner timings, longer) |
 | `MIX` | per experiment | worker types cycled over the workers, e.g. `MIX=ccx` (overrides the experiment) |
 | `CB_ORDERS` | `natural random occ reverse occ-rev` | candidate orders (`-bb-order`) |
@@ -319,5 +322,6 @@ grep -E '^(s |b )' runs/<campaign>/<experiment>-<N>/logs/<task>.log
   binary outside the shared directory.
 - **Job pending with reason `Resources`**: the partition does not have `WORKERS × 4` free CPUs. Use fewer workers or
   wait. `PartitionTimeLimit`: lower `TIMEOUT` or `REPS`.
-- **Out of memory** (state `OUT_OF_MEMORY`, or exit 137 in a run): raise `MEM_PER_CPU`, e.g. `MEM_PER_CPU=8G`. A
-  request above the memory of a node keeps the job pending: on a 4-CPU node with ~15.8 GB, 3900M is the maximum.
+- **Out of memory** (state `OUT_OF_MEMORY`, or exit 137 in a run): raise `MEM_PER_WORKER`. A worker
+  must fit on one node: on a 4-CPU node with ~15.8 GB, 15G is close to the maximum, and a larger request keeps the
+  job pending.

@@ -41,9 +41,11 @@ export JOB_NAME=${JOB_NAME:-bpl-$CAMPAIGN}
 
 here=$(dirname "$0")
 echo "campaign $CAMPAIGN (results in runs/$CAMPAIGN)"
+failed=()
 for c in "${configs[@]}"; do
 	exp=${c%-*} n=${c##*-}
-	EXPERIMENT=$exp WORKERS=$n LABEL=$c OUT=runs/$CAMPAIGN/$c bash "$here/bench.sbatch" "${submit[@]}"
+	EXPERIMENT=$exp WORKERS=$n LABEL=$c OUT=runs/$CAMPAIGN/$c bash "$here/bench.sbatch" "${submit[@]}" || failed+=("$c")
 done
 ((${#submit[@]})) || echo "nothing submitted: add --submit (resume later with CAMPAIGN=$CAMPAIGN)"
 echo "summary: bash $here/collect.sh runs/$CAMPAIGN"
+((${#failed[@]} == 0)) || { echo "ERROR not submitted: ${failed[*]}" >&2; exit 1; }
