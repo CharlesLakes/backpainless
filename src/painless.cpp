@@ -9,6 +9,9 @@
 
 #include "working/PortfolioSimple.hpp"
 
+#include <cstring>
+#include <execinfo.h>
+#include <fcntl.h>
 #include <random>
 #include <thread>
 #include <unistd.h>
@@ -36,6 +39,51 @@ signalHandler(int signum)
 	std::raise(signum);
 }
 
+// Crash handler: prints the signal, the memory of the process and a backtrace on stderr, then dies with the same
+// signal. Only async-signal-safe calls (write, open, read, close, strlen, strncmp, backtrace_symbols_fd); the
+// backtrace library is loaded in advance by setupExitHandlers. The frames are "binary(+offset)":
+// addr2line -f -C -e <binary> <offset> names them.
+void
+crashHandler(int signum)
+{
+	auto put = [](const char* s, size_t n) { ssize_t r = write(STDERR_FILENO, s, n); (void)r; };
+	auto puts = [&put](const char* s) { put(s, strlen(s)); };
+	char num[16];
+	int len = 0;
+	for (int v = signum; v > 0 || len == 0; v /= 10)
+		num[len++] = '0' + v % 10;
+	puts("\nc CRASH: signal ");
+	while (len)
+		put(&num[--len], 1);
+	puts(signum == SIGSEGV ? " (segmentation fault)\n" : "\n");
+
+	/* VmPeak / VmHWM / VmRSS: a crash after running out of memory shows here */
+	int fd = open("/proc/self/status", O_RDONLY);
+	if (fd >= 0) {
+		char buf[4096];
+		ssize_t n = read(fd, buf, sizeof(buf));
+		close(fd);
+		for (ssize_t start = 0, i = 0; i < n; i++) {
+			if (buf[i] != '\n')
+				continue;
+			const char* l = buf + start;
+			if (!strncmp(l, "VmPeak", 6) || !strncmp(l, "VmHWM", 5) || !strncmp(l, "VmRSS", 5)) {
+				puts("c CRASH: ");
+				put(l, i + 1 - start);
+			}
+			start = i + 1;
+		}
+	}
+
+	void* frames[64];
+	int count = backtrace(frames, 64);
+	puts("c CRASH: backtrace\n");
+	backtrace_symbols_fd(frames, count, STDERR_FILENO);
+
+	std::signal(signum, SIG_DFL);
+	std::raise(signum);
+}
+
 // Function to set up exit handlers
 void
 setupExitHandlers()
@@ -47,7 +95,12 @@ setupExitHandlers()
 	std::signal(SIGINT, signalHandler);
 	std::signal(SIGTERM, signalHandler);
 	std::signal(SIGABRT, signalHandler);
-	// Add more signals as needed
+
+	/* backtrace() loads libgcc on its first call, which must not happen inside the handler */
+	void* frame;
+	backtrace(&frame, 1);
+	for (int signum : { SIGSEGV, SIGBUS, SIGFPE, SIGILL })
+		std::signal(signum, crashHandler);
 }
 
 // -------------------------------------------

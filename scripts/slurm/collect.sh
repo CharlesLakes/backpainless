@@ -66,8 +66,9 @@ awk -F'\t' '
 	  if (!($3 in pseen)) { pseen[$3]; ports[++np] = $3 }
 	  k = $2 SUBSEP $3; t = $7 ? $8 : 2 * $12
 	  sum[k] += t; cnt[k]++; uns[k] += !$7; tot[$3] += t; tcnt[$3]++
-	  if ($5 == 124 || $5 == 137) hang = hang " " $3 ":" $1
-	  else if ($5 != 0 && $5 != 10 && $5 != 20) crash = crash " " $3 ":" $1 "(exit " $5 ")"
+	  if ($6 == "HANG") hang = hang " " $3 ":" $1
+	  else if ($6 == "NOSTART") nostart = nostart " " $3 ":" $1
+	  else if ($5 != 0 && $5 != 10 && $5 != 20) crash = crash " " $3 ":" $1 "(" $6 ", exit " $5 ")"
 	  if ($7) { a = $6 ":" $10; if (!(($2, a) in ans)) { ans[$2, a]; nans[$2]++; anss[$2] = anss[$2] " " a } } }
 	END {
 		w = 14; for (j = 1; j <= np; j++) if (length(ports[j]) > w) w = length(ports[j])
@@ -87,8 +88,9 @@ awk -F'\t' '
 				if (cnt[a] && cnt[b]) { r = (sum[a] / cnt[a]) / (sum[b] / cnt[b]); l += log(r); m++
 					better += r > 1.05; worse += r < 1 / 1.05 } }
 			if (m) printf "  %-*s x%.3f  (%d faster, %d slower by > 5%%, %d instances)\n", w, p, exp(l / m), better, worse, m }
-		if (crash) printf "\nWARNING runs that crashed (exit not 0/10/20, see logs/<task>.log of the experiment):%s\n", crash
-		if (hang) printf "\nWARNING runs killed after -t + 60 s (did not stop by themselves): tasks%s\n", hang
+		if (crash) printf "\nWARNING runs that crashed (SEGFAULT, OOM: out of memory, KILLED: other kill; see logs/<task>.log):%s\n", crash
+		if (hang) printf "\nWARNING runs killed after -t + 60 s (did not stop by themselves):%s\n", hang
+		if (nostart) printf "\nWARNING runs whose MPI ranks never started, even after the retries:%s\n", nostart
 		bad = 0
 		for (i in nans) if (nans[i] > 1) { if (!bad++) print "\nERROR different answers for the same instance (status:backbone hash):"
 			print "  " i ":" anss[i] }
