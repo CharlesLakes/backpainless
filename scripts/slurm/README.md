@@ -229,6 +229,8 @@ TIMEOUT=300 MEM_PER_WORKER=8G XOR_ROUNDS=200 bash scripts/slurm/submit.sh --subm
 | `GSHR` | 1 | global sharing: 1 AllGather, 2 Mallob, 3 ring |
 | `EXTRA_ARGS` | | added to every run, e.g. `-bb-share-cand-local` |
 | `LAUNCHER` | `mpirun --bind-to none -np N` | e.g. `srun --mpi=pmix` if the cluster's MPI requires `srun` |
+| `STARTUP_TIMEOUT` | 180 | seconds for the MPI ranks to start; after that the run is killed and retried |
+| `START_RETRIES` | 2 | retries of a run whose ranks did not start |
 
 ### Options of each worker
 
@@ -280,7 +282,9 @@ runs/<campaign>/<experiment>-<N>/
   config.env        configuration of the experiment
   workers.tsv       type and options of every worker (the worker id is the MPI rank)
   slurm-<jobid>.out output of the job
-  logs/<task>.log   full output of a run, all ranks (errors included)
+  logs/<task>.log   combined output of a run, all ranks (errors included)
+  ranks/<task>/1/rank.<N>/stdout   output of rank N alone (mpirun only); the result is read from the winning rank's
+                    file, because mpirun can glue a line of one rank to a line of another in the combined log
   rows/<task>.tsv   one result row per run
 ```
 
@@ -298,8 +302,22 @@ It writes all the rows to `runs/<campaign>/results.tsv` and prints:
 - the geometric mean speedup over the first configuration (ordered cadiback, xor, maxsat, others, then by number of
   workers);
 - the missing runs and the command to run them (only the incomplete configurations);
-- the runs that crashed (exit code other than 0, 10, 20) and the runs killed after the timeout;
+- the runs that crashed, with the reason in the status column, the runs killed after the timeout, and the runs whose
+  MPI ranks never started (see below);
 - an **error** if two runs of the same instance give different answers (status or backbone hash).
+
+Status of a run: `SATISFIABLE` / `UNSATISFIABLE`, `UNKNOWN` (reached `TIMEOUT`), or why it stopped otherwise:
+
+| Status | Meaning |
+|---|---|
+| `SEGFAULT` | a rank crashed (signal 11); mpirun then aborts the whole run |
+| `OOM` | a rank was killed (signal 9) and Slurm marked a step `OUT_OF_MEMORY`: it exceeded `MEM_PER_WORKER` |
+| `KILLED` | a rank was killed by signal 9 without an OOM record |
+| `HANG` | the run did not stop within `TIMEOUT` + 60 s and was killed |
+| `NOSTART` | the MPI ranks did not start within `STARTUP_TIMEOUT`, even after `START_RETRIES` retries (exit 125) |
+
+After any run that did not end normally, the job kills the processes of this job left on its nodes (ranks and Open MPI
+daemons) before the next run, so that a stuck run does not block the following ones.
 
 Columns of `results.tsv`: task, instance, experiment, rep, exit (10 SAT, 20 UNSAT, 0 unknown), status, solved, wall
 (s, includes ~2 s of MPI start and stop), bb_size, bb_hash, winner (the id of the winning worker, see `workers.tsv`),
@@ -311,7 +329,8 @@ Only the winning rank prints the result, in the CadiBack format (`s SATISFIABLE`
 literal, `b 0`):
 
 ```bash
-grep -E '^(s |b )' runs/<campaign>/<experiment>-<N>/logs/<task>.log
+grep -lE '^s ' runs/<campaign>/<experiment>-<N>/ranks/<task>/1/rank.*/stdout      # the winning rank
+grep -E '^(s |b )' runs/<campaign>/<experiment>-<N>/ranks/<task>/1/rank.<N>/stdout
 ```
 
 ## Troubleshooting

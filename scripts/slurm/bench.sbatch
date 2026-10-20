@@ -55,6 +55,8 @@ LABEL=${LABEL:-$EXPERIMENT-$WORKERS}        # name of the experiment in the resu
 SERIAL=${SERIAL:-0}                         # 1: --dependency=singleton, jobs of the same JOB_NAME run one at a time
 JOB_NAME=${JOB_NAME:-backpainless}
 EXTRA_ARGS=${EXTRA_ARGS:-}                  # added to every run, e.g. "-bb-share-cand-local"
+STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-180}      # seconds for MPI to start rank 0, else the run is killed and retried
+START_RETRIES=${START_RETRIES:-2}           # retries of a run whose ranks did not start
 RUN_SLACK=120 # seconds per run above TIMEOUT: kill after -t + 60 s (+10 s), MPI start and stop
 JOB_SLACK=300 # seconds per job: logs, collect
 # Open MPI's mpirun reads the Slurm allocation (one rank per task); --bind-to none, otherwise each rank is bound to one
@@ -218,6 +220,61 @@ TMP_DIR=$(mktemp -d -p "${SLURM_TMPDIR:-${TMPDIR:-/tmp}}")
 trap 'rm -rf "$TMP_DIR"' EXIT
 read -ra launcher <<<"$LAUNCHER"
 read -ra extra <<<"$EXTRA_ARGS"
+# process names of the ranks: the name the binary is run by (./backpainless, a symlink) and the file it points to
+binary_names="$(basename "$BINARY") $(basename "$(readlink -f "$BINARY")")"
+
+# Kills the processes of this job that a killed run may have left on the nodes (ranks, Open MPI daemons), so that the
+# next run can start. Only processes whose environment holds this job's id: other jobs on the same node are untouched.
+cleanup_nodes() {
+	[[ -n ${SLURM_JOB_ID:-} ]] && command -v srun >/dev/null || return 0
+	timeout 60 srun --overlap --nodes="$SLURM_JOB_NUM_NODES" --ntasks-per-node=1 --cpus-per-task=1 bash -c '
+		for name in $0 orted; do
+			for pid in $(pgrep -u "$USER" -x "${name:0:15}"); do
+				tr "\0" "\n" <"/proc/$pid/environ" 2>/dev/null | grep -qx "SLURM_JOB_ID=$1" && kill -KILL "$pid"
+			done
+		done; true' "$binary_names" "$SLURM_JOB_ID" >/dev/null 2>&1 || true
+}
+
+# Number of job steps that Slurm marked OUT_OF_MEMORY so far (an OOM kill of a rank raises it)
+oom_steps() { sacct -j "$SLURM_JOB_ID" -n -P -o State 2>/dev/null | grep -c OUT_OF_MEMORY || true; }
+
+# Stops a run: SIGTERM (mpirun forwards it to the ranks), SIGKILL 10 s later
+stop_run() {
+	kill -TERM "$1" 2>/dev/null || true
+	for _ in {1..10}; do kill -0 "$1" 2>/dev/null || break; sleep 1; done
+	kill -KILL "$1" 2>/dev/null || true
+	wait "$1" 2>/dev/null || true
+}
+
+# One attempt of the run: sets code to its exit code, 124 when killed after TIMEOUT + 60 s, or "nostart" when rank 0
+# did not print its parameters (it does right after MPI_Init) within STARTUP_TIMEOUT
+run_attempt() {
+	local off pid t0 started=0
+	off=$(stat -c %s "$log")
+	rm -rf "$rankdir"
+	"${cmd[@]}" >>"$log" 2>&1 &
+	pid=$!
+	t0=$SECONDS
+	code=0
+	while kill -0 "$pid" 2>/dev/null; do
+		sleep 2
+		if ((!started)); then
+			if tail -c +$((off + 1)) "$log" | grep -aq "c Parameters:"; then
+				started=1
+			elif ((SECONDS - t0 > STARTUP_TIMEOUT)); then
+				stop_run "$pid"
+				code=nostart
+				return
+			fi
+		fi
+		if ((SECONDS - t0 > TIMEOUT + 60)); then
+			stop_run "$pid"
+			code=124
+			return
+		fi
+	done
+	wait "$pid" || code=$?
+}
 
 for ((task = 0; task < total; task++)); do
 	done_task $task && continue
@@ -236,19 +293,42 @@ for ((task = 0; task < total; task++)); do
 	*.bz2) bzip2 -dc "$inst" >"$TMP_DIR/instance.cnf"; input=$TMP_DIR/instance.cnf ;;
 	esac
 
+	# The output of every rank also goes to its own file (Open MPI: ranks/<task>/1/rank.<N>/stdout): mpirun forwards
+	# the ranks' output in chunks, so in the combined log a line of one rank can end up glued to a line of another
 	log=$OUT/logs/$task.log
-	cmd=("${launcher[@]}" "$BINARY" "$input" "${WORKER_ARGS[@]}" "${extra[@]}" "-t=$TIMEOUT")
+	rankdir=$OUT/ranks/$task
+	launch=("${launcher[@]}")
+	[[ ${launcher[0]##*/} == mpirun ]] && launch+=(--output-filename "$rankdir")
+	cmd=("${launch[@]}" "$BINARY" "$input" "${WORKER_ARGS[@]}" "${extra[@]}" "-t=$TIMEOUT")
 	echo "c task $task: ${cmd[*]}" >"$log"
-	start=$(date +%s.%N)
-	code=0
-	# a run that does not stop by itself after -t is killed 60 s later (exit 124); killing mpirun stops every rank
-	timeout -k 10 $((TIMEOUT + 60)) "${cmd[@]}" >>"$log" 2>&1 || code=$?
-	end=$(date +%s.%N)
+	ooms=$(oom_steps)
+	for ((attempt = 1; ; attempt++)); do
+		start=$(date +%s.%N)
+		run_attempt
+		end=$(date +%s.%N)
+		if [[ $code != 0 && $code != 10 && $code != 20 ]]; then
+			# state and peak memory of the job steps (one per node for mpirun): tells an OOM kill from other kills
+			command -v sacct >/dev/null && sacct -j "$SLURM_JOB_ID" -P -o JobID,State,ExitCode,MaxRSS,MaxRSSNode \
+				2>/dev/null | tail -n 12 | sed 's/^/c sacct: /' >>"$log" || true
+			cleanup_nodes
+		fi
+		[[ $code == nostart ]] || break
+		echo "c attempt $attempt: no rank started within $STARTUP_TIMEOUT s, nodes cleaned" >>"$log"
+		if ((attempt > START_RETRIES || SECONDS + TIMEOUT + RUN_SLACK > deadline)); then
+			code=125
+			break
+		fi
+	done
 
 	# Result: task instance experiment rep exit status solved wall bb_size bb_hash winner timeout nodes
-	# (exit: the highest of the ranks; winner: global solver id = rank, see workers.tsv; only the winning rank
-	# prints s/b)
-	clean=$(sed 's/\x1b\[[0-9;]*m//g' "$log")
+	# (exit: the highest of the ranks; winner: global solver id = rank, see workers.tsv). Only the winning rank prints
+	# s/b: read from its own file when there is one, else from the combined log
+	src=$log
+	if [[ -d $rankdir ]]; then
+		f=$(grep -lE '^s (SATISFIABLE|UNSATISFIABLE)' "$rankdir"/*/rank.*/stdout 2>/dev/null | head -1 || true)
+		[[ -n $f ]] && src=$f
+	fi
+	clean=$(sed 's/\x1b\[[0-9;]*m//g' "$src")
 	status=$(grep -m1 '^s ' <<<"$clean" | cut -c3- || true)
 	[[ $status == SATISFIABLE || $status == UNSATISFIABLE ]] && solved=1 || solved=0
 	bb_size=$(grep -cE '^b -?[1-9]' <<<"$clean" || true)
@@ -257,6 +337,18 @@ for ((task = 0; task < total; task++)); do
 	rank=$(grep -m1 -oE 'The winner is mpi process [0-9]+' <<<"$clean" | grep -oE '[0-9]+$' || true)
 	winner=$(grep -oE "\[mpi:${rank:-x}\] The winner is backbone solver [0-9]+" <<<"$clean" | grep -m1 -oE '[0-9]+$' || echo -)
 	wall=$(awk -v a="$start" -v b="$end" 'BEGIN { printf "%.3f", b - a }')
+	# why an unsolved run stopped, when it is not the timeout of backpainless
+	if ((!solved)) && [[ -z $status ]]; then
+		sig=$(sed 's/\x1b\[[0-9;]*m//g' "$log" | grep -m1 -oE 'exited on signal [0-9]+' | grep -oE '[0-9]+$' || true)
+		case $code:$sig in
+		125:*) status=NOSTART ;;
+		*:11) status=SEGFAULT ;;
+		*:9) (($(oom_steps) > ooms)) && status=OOM || status=KILLED ;;
+		124:*) status=HANG ;;
+		*) status=NONE ;;
+		esac
+		echo "c result: exit $code, signal ${sig:-none}, $status" >>"$log"
+	fi
 
 	printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$task" "$(basename "$inst")" "$LABEL" "$rep" "$code" \
 		"${status:-NONE}" "$solved" "$wall" "$bb_size" "$bb_hash" "$winner" "$TIMEOUT" "$nodes" >"$OUT/rows/.$task.tsv"
