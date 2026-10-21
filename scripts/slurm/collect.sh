@@ -5,7 +5,8 @@
 #
 # Usage: scripts/slurm/collect.sh runs/<campaign>            # every experiment of a campaign (submit.sh)
 #        scripts/slurm/collect.sh runs/<dir> [runs/<dir>...]  # given experiment dirs, the first is the baseline
-# A campaign is ordered cadiback, xor, maxsat, others, then by number of workers. The runs missing from a dir (still
+# A campaign is ordered cadiback (or c, the baseline), xor, maxsat, then the other mixes by number of worker types,
+# then by number of workers. The runs missing from a dir (still
 # running, time limit, failure) are listed with the command to run them.
 
 set -euo pipefail
@@ -17,7 +18,7 @@ if (($# == 1)) && [[ ! -d $1/rows && ! -f $1/config.env ]]; then
 	campaign=$1
 	mapfile -t dirs < <(for d in "$1"/*/; do [[ -d $d/rows || -f $d/config.env ]] && echo "${d%/}"; done |
 		awk -F/ '{ n = $NF; e = n; sub(/-[0-9]+$/, "", e); w = n; sub(/.*-/, "", w)
-			r = e == "cadiback" ? 0 : e == "xor" ? 1 : e == "maxsat" ? 2 : 3
+			r = e == "cadiback" || e == "c" ? 0 : e == "xor" ? 1 : e == "maxsat" ? 2 : 2 + length(e)
 			printf "%d\t%s\t%08d\t%s\n", r, e, w, $0 }' | sort | cut -f4)
 	((${#dirs[@]})) || { echo "no experiment in $1" >&2; exit 1; }
 else

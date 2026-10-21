@@ -5,10 +5,14 @@
 # runs the tasks (instance, repetition) one after the other, each task one MPI run over all the workers.
 # scripts/slurm/submit.sh submits the configurations you choose (e.g. xor-16), one job each, through this script.
 #
-# Experiments (worker types assigned round robin, so that they are split as evenly as possible):
-#   cadiback  only CadiBack workers (c)
-#   xor       CadiBack and DiverseBackboneSearch workers (c, x), the x workers explore with many XOR rounds
-#   maxsat    CadiBack, DiverseBackboneSearch and MaxSAT workers (c, x, m)
+# Worker types (letters of MIX, cycled over the workers, so that the types of a mix get the same number of workers,
+# within one):
+#   c  CadiBack on CaDiCaL
+#   m  MaxSatBackbone: rounds of EvalMaxSAT on CaDiCaL, then the CadiBack loop
+#   x  DiverseBackboneSearch: XOR exploration on CryptoMiniSat, then the CadiBack loop on CryptoMiniSat
+#   p  CadiBack with the XOR exploration first, on CaDiCaL (-bb-xor-pre), then the CadiBack loop on the same solver
+# Experiments: a name made of these letters is the MIX itself (e.g. cp: half c, half p; cmxp: the four types), plus
+#   cadiback = c, xor = cx, maxsat = cxm (the mixes of the first campaigns)
 # Inside a type the configurations vary from one worker to the next (see "Worker configurations").
 #
 # Usage, from the repository root after 'make' (binary and instances on a file system shared by the nodes):
@@ -68,26 +72,36 @@ case $EXPERIMENT in
 cadiback) MIX=${MIX:-c} ;;
 xor) MIX=${MIX:-cx} ;;
 maxsat) MIX=${MIX:-cxm} ;;
-*) MIX=${MIX:?unknown EXPERIMENT $EXPERIMENT: set MIX (worker types, e.g. cxm)} ;;
+*[!cmxp]*) MIX=${MIX:?unknown EXPERIMENT $EXPERIMENT: set MIX (worker types c, m, x, p, e.g. cxm)} ;;
+*) MIX=${MIX:-$EXPERIMENT} ;;
 esac
+[[ $MIX =~ ^[cmxps]+$ ]] || { echo "invalid MIX=$MIX: expected worker types c, m, x, p, s" >&2; exit 1; }
 
-# Worker configurations. Two lists A and B are combined so that both change from one worker to the next and every
-# pair appears once in |A| * |B| workers: the k-th worker of a type takes A[k % |A|] and B[(k + k / lcm) % |B|]. CadiBack
-# (c, s): order x chunk (15 different workers with the defaults); x: m x density (6), and order k % |orders|; m: order.
-# Beyond the number of combinations they repeat with other seeds.
+# Worker configurations, they vary from one worker of a type to the next. Two lists A and B are combined so that both
+# change from one worker to the next and every pair appears once in |A| * |B| workers: the k-th worker of a type takes
+# A[k % |A|] and B[(k + k / lcm) % |B|].
+#   c, s  order x chunk (15 different workers with the defaults)
+#   p     order x chunk, and XORs per round x density (6), counted separately
+#   x     XORs per round x density (6), and order k % |orders|
+#   m     order
+# Beyond the number of combinations they repeat with other seeds (the seed follows the worker id).
 CB_ORDERS=${CB_ORDERS:-natural random occ reverse occ-rev}
 CB_CHUNKS=${CB_CHUNKS:-0 10 1}               # 0: all candidates, 1: one by one, K: geometric growth
-XOR_MS=${XOR_MS:-10 12 16}                   # XORs per round (2^m leaves)
-XOR_DENSITIES=${XOR_DENSITIES:-0.5 0.3}      # variables of each XOR: probability per candidate
-XOR_ROUNDS=${XOR_ROUNDS:-1000}               # rounds of exploration before the CadiBack loop (default of x: 1)
-XOR_PATIENCE=${XOR_PATIENCE:-0}              # 0: a round is never abandoned (default of x: 4x)
-XOR_CONFL=${XOR_CONFL:-2x}                   # conflict budget of a node
+XOR_MS=${XOR_MS:-10 12 16}                   # XORs per round (2^m leaves), x and p
+XOR_DENSITIES=${XOR_DENSITIES:-0.5 0.3}      # variables of each XOR: probability per candidate, x and p
+XOR_ROUNDS=${XOR_ROUNDS:-1000}               # rounds of exploration before the CadiBack loop, x and p
+XOR_CONFL=${XOR_CONFL:-2x}                   # conflict budget of a node, x and p
+# Patience: a round is abandoned after that many conflicts without a new free variable ('<f>x' = f times the first
+# model, 0 = never), and the exploration ends when an abandoned round found nothing, which hands the rest of the time
+# to the CadiBack loop. 0 for x keeps the long exploration of the first campaigns.
+XOR_PATIENCE=${XOR_PATIENCE:-0}              # x workers
+PRE_PATIENCE=${PRE_PATIENCE:-4x}             # p workers
 MAXSAT_ROUNDS=${MAXSAT_ROUNDS:-0}            # 0: until a round drops no candidate
 
 # Per-worker lists (one value per worker, the global solver id is the rank) -> backpainless arguments, and the table
 # of the workers (stdout of worker_table)
 build_worker_args() {
-	local orders chunks ms dens i t k o ch xm xd
+	local orders chunks ms dens i t k o ch xm xd pre pat
 	read -ra orders <<<"$CB_ORDERS"
 	read -ra chunks <<<"$CB_CHUNKS"
 	read -ra ms <<<"$XOR_MS"
@@ -98,34 +112,38 @@ build_worker_args() {
 		while ((h)); do t=$((g % h)) g=$h h=$t; done
 		echo $((($1 + $1 / (a / g * b)) % b))
 	}
-	W_SOLVER= W_ORDER=() W_CHUNK=() W_XM=() W_XD=()
+	W_TYPE= W_SOLVER= W_PRE= W_ORDER=() W_CHUNK=() W_XM=() W_XD=() W_PAT=()
 	for ((i = 0; i < WORKERS; i++)); do
 		t=${MIX:i % ${#MIX}:1}
 		k=${count[$t]:-0}
 		count[$t]=$((k + 1))
-		o=${orders[k % ${#orders[@]}]} ch=0 xm=${ms[0]} xd=${dens[0]}
+		o=${orders[k % ${#orders[@]}]} ch=0 xm=${ms[0]} xd=${dens[0]} pre=0 pat=$XOR_PATIENCE
 		case $t in
-		c | s) ch=${chunks[$(pair $k ${#orders[@]} ${#chunks[@]})]} ;;
-		x) xm=${ms[k % ${#ms[@]}]} xd=${dens[$(pair $k ${#ms[@]} ${#dens[@]})]} ;;
-		m) ;;
-		*) echo "unknown worker type '$t' in MIX=$MIX" >&2; exit 1 ;;
+		c | s | p) ch=${chunks[$(pair $k ${#orders[@]} ${#chunks[@]})]} ;;
 		esac
-		W_SOLVER+=$t W_ORDER+=("$o") W_CHUNK+=("$ch") W_XM+=("$xm") W_XD+=("$xd")
+		case $t in
+		x | p) xm=${ms[k % ${#ms[@]}]} xd=${dens[$(pair $k ${#ms[@]} ${#dens[@]})]} ;;
+		esac
+		[[ $t == p ]] && pre=1 pat=$PRE_PATIENCE
+		W_TYPE+=$t W_SOLVER+=${t/p/c} W_PRE+=$pre
+		W_ORDER+=("$o") W_CHUNK+=("$ch") W_XM+=("$xm") W_XD+=("$xd") W_PAT+=("$pat")
 	done
 	local IFS=,
 	WORKER_ARGS=(-dist "-gshr-strat=$GSHR" -c=1 "-solver=$W_SOLVER" "-bb-order=${W_ORDER[*]}"
 		"-bb-chunk=${W_CHUNK[*]}" -bb-share-cand=1 "-bb-xor-m=${W_XM[*]}" "-bb-xor-density=${W_XD[*]}"
-		"-bb-xor-rounds=$XOR_ROUNDS" "-bb-xor-patience=$XOR_PATIENCE" "-bb-xor-confl=$XOR_CONFL"
+		"-bb-xor-rounds=$XOR_ROUNDS" "-bb-xor-patience=${W_PAT[*]}" "-bb-xor-confl=$XOR_CONFL" "-bb-xor-pre=$W_PRE"
 		"-bb-maxsat-rounds=$MAXSAT_ROUNDS")
 }
 worker_table() {
-	local i
-	printf "worker\ttype\torder\tchunk\txor-m\txor-density\n"
+	local i t
+	printf "worker\ttype\torder\tchunk\txor-m\txor-density\txor-patience\n"
 	for ((i = 0; i < WORKERS; i++)); do
-		case ${W_SOLVER:i:1} in
-		c | s) printf "%d\t%s\t%s\t%s\t-\t-\n" $i "${W_SOLVER:i:1}" "${W_ORDER[i]}" "${W_CHUNK[i]}" ;;
-		x) printf "%d\tx\t%s\t-\t%s\t%s\n" $i "${W_ORDER[i]}" "${W_XM[i]}" "${W_XD[i]}" ;;
-		*) printf "%d\t%s\t%s\t-\t-\t-\n" $i "${W_SOLVER:i:1}" "${W_ORDER[i]}" ;;
+		t=${W_TYPE:i:1}
+		case $t in
+		c | s) printf "%d\t%s\t%s\t%s\t-\t-\t-\n" $i "$t" "${W_ORDER[i]}" "${W_CHUNK[i]}" ;;
+		p) printf "%d\tp\t%s\t%s\t%s\t%s\t%s\n" $i "${W_ORDER[i]}" "${W_CHUNK[i]}" "${W_XM[i]}" "${W_XD[i]}" "${W_PAT[i]}" ;;
+		x) printf "%d\tx\t%s\t-\t%s\t%s\t%s\n" $i "${W_ORDER[i]}" "${W_XM[i]}" "${W_XD[i]}" "${W_PAT[i]}" ;;
+		*) printf "%d\t%s\t%s\t-\t-\t-\t-\n" $i "$t" "${W_ORDER[i]}" ;;
 		esac
 	done
 }
@@ -209,7 +227,7 @@ deadline=$((SECONDS + (left >= 0 ? left : 1 << 30)))
 worker_table >"$OUT/workers.tsv"
 {
 	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_WORKER MEM_PER_CPU EXCLUDE INSTANCES REPS TIMEOUT GSHR BINARY CB_ORDERS CB_CHUNKS XOR_MS \
-		XOR_DENSITIES XOR_ROUNDS XOR_PATIENCE XOR_CONFL MAXSAT_ROUNDS EXTRA_ARGS total; do
+		XOR_DENSITIES XOR_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS EXTRA_ARGS total; do
 		printf '%s=%q\n' "$v" "${!v}"
 	done
 } >"$OUT/config.env"
