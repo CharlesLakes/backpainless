@@ -1,9 +1,11 @@
 #!/bin/bash
 # Submits the configurations you choose, one bench.sbatch job each. A configuration is <experiment>-<workers>, each
-# worker with 4 CPUs:
-#   cadiback-<N>  only CadiBack workers (c)
-#   xor-<N>       CadiBack and DiverseBackboneSearch workers (c, x)
-#   maxsat-<N>    CadiBack, DiverseBackboneSearch and MaxSAT workers (c, x, m)
+# worker with 4 CPUs. The experiment is a mix of worker types, split as evenly as possible among the N workers:
+#   c  CadiBack                       m  MaxSAT (EvalMaxSAT on CaDiCaL)
+#   x  XOR on CryptoMiniSat (-solver=x)   p  XOR on CaDiCaL before CadiBack (-bb-xor-pre)
+# e.g. c-16 (16 c), cp-16 (8 c, 8 p), cmxp-16 (4 of each). Also:
+#   all-<N>       the 15 mixes of c, m, x, p (every non-empty subset), one job each
+#   cadiback-<N>, xor-<N>, maxsat-<N>   the mixes c, cx, cxm of the first campaigns
 #   <name>-<N>    any other name with MIX=<worker types>, e.g. MIX=ccxm mymix-16
 # Results in runs/<campaign>/<configuration>/, summary with collect.sh runs/<campaign>.
 #
@@ -26,10 +28,19 @@ usage() {
 
 submit=()
 configs=()
+types=cmxp
 for a; do
 	case $a in
 	--submit) submit=(--submit) ;;
 	-h | --help) usage ;;
+	all-[0-9]*)
+		# every non-empty subset of the four worker types, letters in the order c, m, x, p
+		for ((mask = 1; mask < 16; mask++)); do
+			mix=
+			for ((b = 0; b < 4; b++)); do ((mask >> b & 1)) && mix+=${types:b:1}; done
+			configs+=("$mix-${a#all-}")
+		done
+		;;
 	*-[0-9]*) configs+=("$a") ;;
 	*) echo "invalid configuration '$a': expected <experiment>-<workers>, e.g. xor-16" >&2; exit 1 ;;
 	esac

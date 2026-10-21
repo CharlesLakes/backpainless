@@ -87,26 +87,49 @@ of 10 literals, a few seconds). `ais12.cnf` is a good speed test, but its backbo
 
 ## 4. Configurations
 
-A **configuration** is a portfolio of workers, named `<experiment>-<workers>`. The experiment determines the worker
-types and the number determines the total number of workers. The types are assigned round robin (`c, x, m, c, x, m,
-...`), so the workers are split among the types as evenly as possible:
+A **configuration** is a portfolio of workers, named `<experiment>-<workers>`. The experiment is the mix of worker
+types, one letter per type, and the number is the total number of workers. The letters are cycled over the workers
+(`c, m, x, p, c, m, ...`), so the types of a mix get the same number of workers, within one:
 
-| Experiment | Worker types | 8 workers | 16 workers | 24 workers |
-|---|---|---|---|---|
-| `cadiback` | CadiBack (`c`) | 8 c | 16 c | 24 c |
-| `xor` | CadiBack, DiverseBackboneSearch (`c`, `x`) | 4 c, 4 x | 8 c, 8 x | 12 c, 12 x |
-| `maxsat` | CadiBack, DiverseBackboneSearch, MaxSAT (`c`, `x`, `m`) | 3 c, 3 x, 2 m | 6 c, 5 x, 5 m | 8 c, 8 x, 8 m |
-| any other name | the types given by `MIX`, e.g. `MIX=ccxm mymix-16` | | | |
+| Type | Solver | Search |
+|---|---|---|
+| `c` | CadiBack on CaDiCaL | the CadiBack loop |
+| `m` | MaxSatBackbone on CaDiCaL (`-solver=m`) | rounds of EvalMaxSAT, then the CadiBack loop |
+| `x` | DiverseBackboneSearch on CryptoMiniSat (`-solver=x`) | XOR exploration, then the CadiBack loop on CryptoMiniSat |
+| `p` | CadiBack on CaDiCaL with `-bb-xor-pre` | XOR exploration on CaDiCaL, then the CadiBack loop on the same solver |
 
-The `x` workers are configured for a long exploration: 1000 XOR rounds, and a round is never abandoned
-(`XOR_ROUNDS`, `XOR_PATIENCE`).
+| Experiment | 8 workers | 16 workers | 24 workers |
+|---|---|---|---|
+| `c` (or `cadiback`) | 8 c | 16 c | 24 c |
+| `p` | 8 p | 16 p | 24 p |
+| `cp` | 4 c, 4 p | 8 c, 8 p | 12 c, 12 p |
+| `cmxp` | 2 of each | 4 of each | 6 of each |
+| `xor`, `maxsat` | the mixes `cx` and `cxm` of the first campaigns | | |
+| any other name | the types given by `MIX`, e.g. `MIX=ccxm mymix-16` | | |
+
+`all-<N>` stands for the 15 mixes of the four types (every non-empty subset: `c`, `m`, `cm`, `x`, ..., `cmxp`), each
+one with N workers.
+
+Inside a type the workers do not all run the same configuration: CadiBack (`c`, `p`) varies the candidate order and the
+chunk size (`CB_ORDERS` x `CB_CHUNKS`, 15 combinations), the XOR workers (`x`, `p`) the number of XORs per round and
+their density (`XOR_MS` x `XOR_DENSITIES`, 6 combinations), MaxSAT (`m`) the candidate order. Every worker also has its
+own seed. `workers.tsv` of each configuration lists what each worker runs.
+
+The XOR exploration of `x` and `p` makes up to 1000 rounds (`XOR_ROUNDS`). A round is abandoned after a number of
+conflicts without a new free variable (the patience), and the exploration ends when an abandoned round found nothing:
+the worker then runs the CadiBack loop on the rest of the candidates, so it can always complete the backbone.
+
+- `x` keeps the setting of the first campaigns: the patience is 0, a round is never abandoned (`XOR_PATIENCE`), so the
+  worker may explore for the whole run.
+- `p` abandons a round after 4 times the conflicts of the first model (`PRE_PATIENCE=4x`), so that the CadiBack loop
+  gets the rest of the time. Its learnt clauses are exported like those of any CadiBack worker.
 
 ### What the workers of a configuration share
 
 A configuration is executed as **one MPI run**: all its workers run at the same time and cooperate, whether or not
 they are on the same node.
 
-| Information | `c` (CadiBack) | `x` (XOR) | `m` (MaxSAT) |
+| Information | `c`, `p` (CadiBack) | `x` (XOR on CryptoMiniSat) | `m` (MaxSAT) |
 |---|---|---|---|
 | Learnt clauses: exported | yes | no, by default (`-bb-xor-export=0`) | yes |
 | Learnt clauses: imported | yes | yes | yes |
@@ -192,6 +215,13 @@ bash scripts/slurm/submit.sh --submit maxsat-8 maxsat-16 maxsat-24
 bash scripts/slurm/collect.sh runs/study1
 ```
 
+To find the best mix, `all-<N>` submits the 15 mixes of the four types (15 jobs of N workers each):
+
+```bash
+CAMPAIGN=mixes bash scripts/slurm/submit.sh --submit all-8
+bash scripts/slurm/collect.sh runs/mixes
+```
+
 With 4 CPUs per worker, 24 workers need 96 CPUs. Slurm places the workers on the nodes that are not excluded
 (`EXCLUDE`, `node906,node907` by default) wherever there are free CPUs and memory. On the `solver` partition this
 leaves the 4-CPU nodes node910-927: one worker per node, so at most 18 workers in total (18 × 4 = 72 CPUs). A larger
@@ -220,10 +250,11 @@ TIMEOUT=300 MEM_PER_WORKER=8G XOR_ROUNDS=200 bash scripts/slurm/submit.sh --subm
 | `MIX` | per experiment | worker types cycled over the workers, e.g. `MIX=ccx` (overrides the experiment) |
 | `CB_ORDERS` | `natural random occ reverse occ-rev` | candidate orders (`-bb-order`) |
 | `CB_CHUNKS` | `0 10 1` | chunk sizes of the CadiBack workers (`-bb-chunk`: 0 all, 1 one by one, K geometric) |
-| `XOR_MS` | `10 12 16` | XORs per round of the `x` workers (`-bb-xor-m`) |
-| `XOR_DENSITIES` | `0.5 0.3` | density of the XORs (`-bb-xor-density`) |
+| `XOR_MS` | `10 12 16` | XORs per round of the `x` and `p` workers (`-bb-xor-m`) |
+| `XOR_DENSITIES` | `0.5 0.3` | density of the XORs of the `x` and `p` workers (`-bb-xor-density`) |
 | `XOR_ROUNDS` | 1000 | XOR rounds before the CadiBack loop (`-bb-xor-rounds`) |
-| `XOR_PATIENCE` | 0 | 0: a round is never abandoned (`-bb-xor-patience`) |
+| `XOR_PATIENCE` | 0 | patience of the `x` workers, 0: a round is never abandoned (`-bb-xor-patience`) |
+| `PRE_PATIENCE` | `4x` | patience of the `p` workers |
 | `XOR_CONFL` | `2x` | conflict budget of an XOR node (`-bb-xor-confl`) |
 | `MAXSAT_ROUNDS` | 0 | MaxSAT rounds of the `m` workers, 0: until a round drops nothing |
 | `GSHR` | 1 | global sharing: 1 AllGather, 2 Mallob, 3 ring |
