@@ -89,12 +89,16 @@ CB_ORDERS=${CB_ORDERS:-natural random occ reverse occ-rev}
 CB_CHUNKS=${CB_CHUNKS:-0 10 1}               # 0: all candidates, 1: one by one, K: geometric growth
 XOR_MS=${XOR_MS:-10 12 16}                   # XORs per round (2^m leaves), x and p
 XOR_DENSITIES=${XOR_DENSITIES:-0.5 0.3}      # variables of each XOR: probability per candidate, x and p
-XOR_ROUNDS=${XOR_ROUNDS:-1000}               # rounds of exploration before the CadiBack loop, x and p
+# Rounds of exploration before the CadiBack loop (each round draws new XORs). x explores for long; p keeps the default
+# of the binary, 1 round, the setting that sped up CadiBack in the local measurements (more rounds did not help)
+XOR_ROUNDS=${XOR_ROUNDS:-1000}               # x workers
+PRE_ROUNDS=${PRE_ROUNDS:-1}                  # p workers
 XOR_CONFL=${XOR_CONFL:-2x}                   # conflict budget of a node, x and p
 # Patience: a round is abandoned after that many conflicts without a new free variable ('<f>x' = f times the first
 # model, 0 = never), and the exploration ends when an abandoned round found nothing, which hands the rest of the time
-# to the CadiBack loop. 0 for x keeps the long exploration of the first campaigns.
-XOR_PATIENCE=${XOR_PATIENCE:-0}              # x workers
+# to the CadiBack loop. The same 4x for x and p, so that they differ only by the engine; XOR_PATIENCE=0 gives the
+# pure explorer x of estudio1-3 (it never reaches the CadiBack loop).
+XOR_PATIENCE=${XOR_PATIENCE:-4x}             # x workers
 PRE_PATIENCE=${PRE_PATIENCE:-4x}             # p workers
 MAXSAT_ROUNDS=${MAXSAT_ROUNDS:-0}            # 0: until a round drops no candidate
 
@@ -112,38 +116,38 @@ build_worker_args() {
 		while ((h)); do t=$((g % h)) g=$h h=$t; done
 		echo $((($1 + $1 / (a / g * b)) % b))
 	}
-	W_TYPE= W_SOLVER= W_PRE= W_ORDER=() W_CHUNK=() W_XM=() W_XD=() W_PAT=()
+	W_TYPE= W_SOLVER= W_PRE= W_ORDER=() W_CHUNK=() W_XM=() W_XD=() W_PAT=() W_ROUNDS=()
 	for ((i = 0; i < WORKERS; i++)); do
 		t=${MIX:i % ${#MIX}:1}
 		k=${count[$t]:-0}
 		count[$t]=$((k + 1))
-		o=${orders[k % ${#orders[@]}]} ch=0 xm=${ms[0]} xd=${dens[0]} pre=0 pat=$XOR_PATIENCE
+		o=${orders[k % ${#orders[@]}]} ch=0 xm=${ms[0]} xd=${dens[0]} pre=0 pat=$XOR_PATIENCE rounds=$XOR_ROUNDS
 		case $t in
 		c | s | p) ch=${chunks[$(pair $k ${#orders[@]} ${#chunks[@]})]} ;;
 		esac
 		case $t in
 		x | p) xm=${ms[k % ${#ms[@]}]} xd=${dens[$(pair $k ${#ms[@]} ${#dens[@]})]} ;;
 		esac
-		[[ $t == p ]] && pre=1 pat=$PRE_PATIENCE
+		[[ $t == p ]] && pre=1 pat=$PRE_PATIENCE rounds=$PRE_ROUNDS
 		W_TYPE+=$t W_SOLVER+=${t/p/c} W_PRE+=$pre
-		W_ORDER+=("$o") W_CHUNK+=("$ch") W_XM+=("$xm") W_XD+=("$xd") W_PAT+=("$pat")
+		W_ORDER+=("$o") W_CHUNK+=("$ch") W_XM+=("$xm") W_XD+=("$xd") W_PAT+=("$pat") W_ROUNDS+=("$rounds")
 	done
 	local IFS=,
 	WORKER_ARGS=(-dist "-gshr-strat=$GSHR" -c=1 "-solver=$W_SOLVER" "-bb-order=${W_ORDER[*]}"
 		"-bb-chunk=${W_CHUNK[*]}" -bb-share-cand=1 "-bb-xor-m=${W_XM[*]}" "-bb-xor-density=${W_XD[*]}"
-		"-bb-xor-rounds=$XOR_ROUNDS" "-bb-xor-patience=${W_PAT[*]}" "-bb-xor-confl=$XOR_CONFL" "-bb-xor-pre=$W_PRE"
+		"-bb-xor-rounds=${W_ROUNDS[*]}" "-bb-xor-patience=${W_PAT[*]}" "-bb-xor-confl=$XOR_CONFL" "-bb-xor-pre=$W_PRE"
 		"-bb-maxsat-rounds=$MAXSAT_ROUNDS")
 }
 worker_table() {
 	local i t
-	printf "worker\ttype\torder\tchunk\txor-m\txor-density\txor-patience\n"
+	printf "worker\ttype\torder\tchunk\txor-m\txor-density\txor-patience\txor-rounds\n"
 	for ((i = 0; i < WORKERS; i++)); do
 		t=${W_TYPE:i:1}
 		case $t in
-		c | s) printf "%d\t%s\t%s\t%s\t-\t-\t-\n" $i "$t" "${W_ORDER[i]}" "${W_CHUNK[i]}" ;;
-		p) printf "%d\tp\t%s\t%s\t%s\t%s\t%s\n" $i "${W_ORDER[i]}" "${W_CHUNK[i]}" "${W_XM[i]}" "${W_XD[i]}" "${W_PAT[i]}" ;;
-		x) printf "%d\tx\t%s\t-\t%s\t%s\t%s\n" $i "${W_ORDER[i]}" "${W_XM[i]}" "${W_XD[i]}" "${W_PAT[i]}" ;;
-		*) printf "%d\t%s\t%s\t-\t-\t-\t-\n" $i "$t" "${W_ORDER[i]}" ;;
+		c | s) printf "%d\t%s\t%s\t%s\t-\t-\t-\t-\n" $i "$t" "${W_ORDER[i]}" "${W_CHUNK[i]}" ;;
+		p) printf "%d\tp\t%s\t%s\t%s\t%s\t%s\t%s\n" $i "${W_ORDER[i]}" "${W_CHUNK[i]}" "${W_XM[i]}" "${W_XD[i]}" "${W_PAT[i]}" "${W_ROUNDS[i]}" ;;
+		x) printf "%d\tx\t%s\t-\t%s\t%s\t%s\t%s\n" $i "${W_ORDER[i]}" "${W_XM[i]}" "${W_XD[i]}" "${W_PAT[i]}" "${W_ROUNDS[i]}" ;;
+		*) printf "%d\t%s\t%s\t-\t-\t-\t-\t-\n" $i "$t" "${W_ORDER[i]}" ;;
 		esac
 	done
 }
@@ -227,7 +231,7 @@ deadline=$((SECONDS + (left >= 0 ? left : 1 << 30)))
 worker_table >"$OUT/workers.tsv"
 {
 	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_WORKER MEM_PER_CPU EXCLUDE INSTANCES REPS TIMEOUT GSHR BINARY CB_ORDERS CB_CHUNKS XOR_MS \
-		XOR_DENSITIES XOR_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS EXTRA_ARGS total; do
+		XOR_DENSITIES XOR_ROUNDS PRE_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS EXTRA_ARGS total; do
 		printf '%s=%q\n' "$v" "${!v}"
 	done
 } >"$OUT/config.env"
@@ -319,6 +323,8 @@ for ((task = 0; task < total; task++)); do
 	[[ ${launcher[0]##*/} == mpirun ]] && launch+=(--output-filename "$rankdir")
 	cmd=("${launch[@]}" "$BINARY" "$input" "${WORKER_ARGS[@]}" "${extra[@]}" "-t=$TIMEOUT")
 	echo "c task $task: ${cmd[*]}" >"$log"
+	# stack limit of the job: the default stack of a thread follows it (2 MB when unlimited)
+	echo "c ulimit -s: $(ulimit -s)" >>"$log"
 	ooms=$(oom_steps)
 	for ((attempt = 1; ; attempt++)); do
 		start=$(date +%s.%N)

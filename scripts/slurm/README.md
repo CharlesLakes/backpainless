@@ -115,14 +115,19 @@ chunk size (`CB_ORDERS` x `CB_CHUNKS`, 15 combinations), the XOR workers (`x`, `
 their density (`XOR_MS` x `XOR_DENSITIES`, 6 combinations), MaxSAT (`m`) the candidate order. Every worker also has its
 own seed. `workers.tsv` of each configuration lists what each worker runs.
 
-The XOR exploration of `x` and `p` makes up to 1000 rounds (`XOR_ROUNDS`). A round is abandoned after a number of
-conflicts without a new free variable (the patience), and the exploration ends when an abandoned round found nothing:
-the worker then runs the CadiBack loop on the rest of the candidates, so it can always complete the backbone.
+Each round of the XOR exploration draws new XORs. A round is abandoned after a number of conflicts without a new free
+variable (the patience), and the exploration ends after the last round or when an abandoned round found nothing: the
+worker then runs the CadiBack loop on the rest of the candidates, so it can always complete the backbone.
 
-- `x` keeps the setting of the first campaigns: the patience is 0, a round is never abandoned (`XOR_PATIENCE`), so the
-  worker may explore for the whole run.
-- `p` abandons a round after 4 times the conflicts of the first model (`PRE_PATIENCE=4x`), so that the CadiBack loop
-  gets the rest of the time. Its learnt clauses are exported like those of any CadiBack worker.
+- `x` makes up to 1000 rounds (`XOR_ROUNDS`) and abandons a round after 4 times the conflicts of the first model
+  (`XOR_PATIENCE=4x`): it explores while it finds free variables, then completes the backbone with the CadiBack loop on
+  CryptoMiniSat. Up to estudio3 the patience was 0: a round was never abandoned and `x` never reached the CadiBack loop
+  (`XOR_PATIENCE=0` gives that pure explorer back). On lightsout, where `x` matters, both settings solve the instance
+  within the first round.
+- `p` makes 1 round (`PRE_ROUNDS`) and abandons it after 4 times the conflicts of the first model (`PRE_PATIENCE=4x`),
+  the setting that sped up CadiBack in the local measurements (more rounds did not help), so that the CadiBack loop
+  gets the rest of the time. Its learnt clauses are exported like those of any CadiBack worker. Up to estudio3, `p`
+  used the 1000 rounds of `x`: most `p` workers were still exploring when the run ended.
 
 ### What the workers of a configuration share
 
@@ -252,8 +257,9 @@ TIMEOUT=300 MEM_PER_WORKER=8G XOR_ROUNDS=200 bash scripts/slurm/submit.sh --subm
 | `CB_CHUNKS` | `0 10 1` | chunk sizes of the CadiBack workers (`-bb-chunk`: 0 all, 1 one by one, K geometric) |
 | `XOR_MS` | `10 12 16` | XORs per round of the `x` and `p` workers (`-bb-xor-m`) |
 | `XOR_DENSITIES` | `0.5 0.3` | density of the XORs of the `x` and `p` workers (`-bb-xor-density`) |
-| `XOR_ROUNDS` | 1000 | XOR rounds before the CadiBack loop (`-bb-xor-rounds`) |
-| `XOR_PATIENCE` | 0 | patience of the `x` workers, 0: a round is never abandoned (`-bb-xor-patience`) |
+| `XOR_ROUNDS` | 1000 | XOR rounds of the `x` workers before the CadiBack loop (`-bb-xor-rounds`) |
+| `PRE_ROUNDS` | 1 | XOR rounds of the `p` workers before the CadiBack loop |
+| `XOR_PATIENCE` | `4x` | patience of the `x` workers, 0: a round is never abandoned (`-bb-xor-patience`) |
 | `PRE_PATIENCE` | `4x` | patience of the `p` workers |
 | `XOR_CONFL` | `2x` | conflict budget of an XOR node (`-bb-xor-confl`) |
 | `MAXSAT_ROUNDS` | 0 | MaxSAT rounds of the `m` workers, 0: until a round drops nothing |
