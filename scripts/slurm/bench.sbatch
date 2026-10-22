@@ -323,6 +323,8 @@ for ((task = 0; task < total; task++)); do
 	[[ ${launcher[0]##*/} == mpirun ]] && launch+=(--output-filename "$rankdir")
 	cmd=("${launch[@]}" "$BINARY" "$input" "${WORKER_ARGS[@]}" "${extra[@]}" "-t=$TIMEOUT")
 	echo "c task $task: ${cmd[*]}" >"$log"
+	# stack limit of the job: the default stack of a thread follows it (2 MB when unlimited)
+	echo "c ulimit -s: $(ulimit -s)" >>"$log"
 	ooms=$(oom_steps)
 	for ((attempt = 1; ; attempt++)); do
 		start=$(date +%s.%N)

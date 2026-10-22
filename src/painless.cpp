@@ -6,6 +6,7 @@
 #include "utils/Parameters.hpp"
 #include "utils/Parsers.hpp"
 #include "utils/System.hpp"
+#include "utils/Threading.hpp"
 
 #include "working/PortfolioSimple.hpp"
 
@@ -99,8 +100,16 @@ setupExitHandlers()
 	/* backtrace() loads libgcc on its first call, which must not happen inside the handler */
 	void* frame;
 	backtrace(&frame, 1);
+	/* On the alternate signal stack of the thread (installSignalStack, also done by every Thread): a stack overflow
+	 * leaves no room on the thread's own stack, and the process would die without a report */
+	installSignalStack();
+	struct sigaction action;
+	memset(&action, 0, sizeof(action));
+	action.sa_handler = crashHandler;
+	action.sa_flags = SA_ONSTACK;
+	sigemptyset(&action.sa_mask);
 	for (int signum : { SIGSEGV, SIGBUS, SIGFPE, SIGILL })
-		std::signal(signum, crashHandler);
+		sigaction(signum, &action, NULL);
 }
 
 // -------------------------------------------
