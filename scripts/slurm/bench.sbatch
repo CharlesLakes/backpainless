@@ -96,8 +96,9 @@ PRE_ROUNDS=${PRE_ROUNDS:-1}                  # p workers
 XOR_CONFL=${XOR_CONFL:-2x}                   # conflict budget of a node, x and p
 # Patience: a round is abandoned after that many conflicts without a new free variable ('<f>x' = f times the first
 # model, 0 = never), and the exploration ends when an abandoned round found nothing, which hands the rest of the time
-# to the CadiBack loop. 0 for x keeps the long exploration of the first campaigns.
-XOR_PATIENCE=${XOR_PATIENCE:-0}              # x workers
+# to the CadiBack loop. The same 4x for x and p, so that they differ only by the engine; XOR_PATIENCE=0 gives the
+# pure explorer x of estudio1-3 (it never reaches the CadiBack loop).
+XOR_PATIENCE=${XOR_PATIENCE:-4x}             # x workers
 PRE_PATIENCE=${PRE_PATIENCE:-4x}             # p workers
 MAXSAT_ROUNDS=${MAXSAT_ROUNDS:-0}            # 0: until a round drops no candidate
 
