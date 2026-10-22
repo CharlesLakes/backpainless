@@ -155,7 +155,8 @@ worker_table() {
 # ---------------------------------------------------------------------------------------------------------------------
 # Task -> (rep, instance). rep is the outermost loop: a partial run already covers every instance
 
-mapfile -t files < <(find "$INSTANCES" -type f \( -name '*.cnf' -o -name '*.cnf.xz' -o -name '*.cnf.gz' \
+# -L: the directory may hold symbolic links to the instances (a subset of another directory)
+mapfile -t files < <(find -L "$INSTANCES" -type f \( -name '*.cnf' -o -name '*.cnf.xz' -o -name '*.cnf.gz' \
 	-o -name '*.cnf.bz2' \) | sort)
 ((${#files[@]})) || { echo "no instance in $INSTANCES" >&2; exit 1; }
 total=$((REPS * ${#files[@]}))
