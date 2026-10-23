@@ -3,8 +3,9 @@
 # worker with 4 CPUs. The experiment is a mix of worker types, split as evenly as possible among the N workers:
 #   c  CadiBack                       m  MaxSAT (EvalMaxSAT on CaDiCaL)
 #   x  XOR on CryptoMiniSat (-solver=x)   p  XOR on CaDiCaL before CadiBack (-bb-xor-pre)
+#   d  CadiBack with one block of candidates per d worker, each starting with its own (D_ORDER for all of them)
 # e.g. c-16 (16 c), cp-16 (8 c, 8 p), cmxp-16 (4 of each). Also:
-#   all-<N>       the 15 mixes of c, m, x, p (every non-empty subset), one job each
+#   all-<N>       the 15 mixes of c, m, x, p (every non-empty subset), one job each (d only in explicit mixes)
 #   cadiback-<N>, xor-<N>, maxsat-<N>   the mixes c, cx, cxm of the first campaigns
 #   <name>-<N>    any other name with MIX=<worker types>, e.g. MIX=ccxm mymix-16
 # Results in runs/<campaign>/<configuration>/, summary with collect.sh runs/<campaign>.

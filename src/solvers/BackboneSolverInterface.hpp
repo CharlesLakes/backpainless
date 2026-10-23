@@ -41,7 +41,8 @@ enum class BackboneSolverType
 	CADIBACK = 0,	  ///< CadiBack algorithm on top of CaDiCaL
 	CADIBACK_SQRT = 1, ///< CadiBack applied block by block (sqrt(#candidates) blocks)
 	DIVERSE_XOR = 2,   ///< DiverseBackboneSearch: random XOR exploration on top of CryptoMiniSat
-	MAXSAT = 3		   ///< MaxSatBackbone: rounds of MaxSAT (EvalMaxSAT) on top of CaDiCaL
+	MAXSAT = 3,		   ///< MaxSatBackbone: rounds of MaxSAT (EvalMaxSAT) on top of CaDiCaL
+	CADIBACK_PARTITION = 4 ///< CadiBackSqrt with one block per d worker, each worker starting with its own block
 };
 
 /**

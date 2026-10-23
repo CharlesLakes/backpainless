@@ -1,9 +1,11 @@
 #include "solvers/BackboneSolverFactory.hpp"
 #include "utils/ErrorCodes.hpp"
 #include "utils/Logger.hpp"
+#include "utils/MpiUtils.hpp"
 #include "utils/Parameters.hpp"
 
 #include "solvers/CDCL/cadiback/CadiBack.hpp"
+#include "solvers/CDCL/cadiback/CadiBackPartition.hpp"
 #include "solvers/CDCL/cadiback/CadiBackSqrt.hpp"
 #include "solvers/CDCL/cadiback/MaxSatBackbone.hpp"
 #include "solvers/CDCL/cryptominisat/DiverseBackboneSearch.hpp"
@@ -53,11 +55,46 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 		solver->setXorOptions(xorOptions.forSolver(solver->getSolverId()));
 	}
 
+	setPartitions(solvers);
+
 	for (auto solver : solvers) {
 		solver->diversify();
 	}
 
 	LOG0("Diversification done");
+}
+
+void
+BackboneSolverFactory::setPartitions(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers)
+{
+	/* The parts are split among the d workers that share a board: all the ranks when the board is exchanged, else the
+	 * process. -solver is cycled over the global ids (PortfolioSimple), so the d workers of every rank are known */
+	const std::string& portfolio = __globalParameters__.solver;
+	const bool global = __globalParameters__.enableDistributed && !__globalParameters__.backboneShareCandidatesLocal &&
+						mpi_world_size > 1;
+	unsigned int total = 0;
+	if (global) {
+		for (int id = 0; id < __globalParameters__.cpus * mpi_world_size; id++)
+			total += portfolio[id % portfolio.size()] == 'd';
+	} else {
+		for (auto solver : solvers)
+			total += solver->getSolverType() == BackboneSolverType::CADIBACK_PARTITION;
+	}
+
+	unsigned int localIndex = 0;
+	for (auto solver : solvers) {
+		auto partition = std::dynamic_pointer_cast<CadiBackPartition>(solver);
+		if (!partition)
+			continue;
+		unsigned int index = localIndex++;
+		if (global) {
+			index = 0;
+			for (unsigned int id = 0; id < solver->getSolverId(); id++)
+				index += portfolio[id % portfolio.size()] == 'd';
+		}
+		partition->setPartition(index, total);
+		LOGDEBUG1("Solver %d owns part %u of %u", solver->getSolverId(), index, total);
+	}
 }
 
 std::shared_ptr<CandidateBoard>
@@ -103,6 +140,8 @@ BackboneSolverFactory::createSolver(char type, char importDBType)
 			return std::make_shared<CadiBack>(id, importDB);
 		case 's':
 			return std::make_shared<CadiBackSqrt>(id, importDB);
+		case 'd':
+			return std::make_shared<CadiBackPartition>(id, importDB);
 		case 'x':
 			return std::make_shared<DiverseBackboneSearch>(id, importDB);
 		case 'm':
