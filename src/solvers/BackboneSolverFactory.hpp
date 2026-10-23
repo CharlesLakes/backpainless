@@ -19,7 +19,8 @@ using IDScaler = std::function<unsigned(const std::shared_ptr<BackboneSolverInte
  * @ingroup solving
  *
  * Portfolio characters (-solver=<string>): 'c' CadiBack (CaDiCaL), 's' CadiBackSqrt (CadiBack block by block),
- * 'x' DiverseBackboneSearch (random XOR exploration, CryptoMiniSat).
+ * 'd' CadiBackPartition (one block of candidates per d worker), 'x' DiverseBackboneSearch (random XOR exploration,
+ * CryptoMiniSat).
  */
 class BackboneSolverFactory
 {
@@ -51,6 +52,10 @@ class BackboneSolverFactory
 	static std::shared_ptr<CandidateBoard> connectCandidateBoard(
 		const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers,
 		unsigned int nbVars);
+
+	/// @brief Gives every d worker (CadiBackPartition) its part: its index among the d workers sharing a board, and
+	/// their number (call after the ids are set).
+	static void setPartitions(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers);
 
 	/// @brief Sets the ids of the solvers using the scalers, then calls their native diversification.
 	static void diversification(

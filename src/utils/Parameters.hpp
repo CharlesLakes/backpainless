@@ -205,6 +205,7 @@ extern Parameters __globalParameters__;
 	BLUE "The solver parameter " YELLOW "(-solver=<string>)" BLUE " accepts the following characters:\n" RESET         \
 		 " " BOLD "c" RESET " - CadiBack backbone solver (CaDiCaL)\n"                                                  \
 		 " " BOLD "s" RESET " - CadiBackSqrt: CadiBack applied block by block, sqrt(#candidates) blocks\n"             \
+		 " " BOLD "d" RESET " - CadiBackPartition: one block per d worker, worker i starts with block i\n"             \
 		 "\n" BLUE "Import Database Types " YELLOW "(-importDB=<char>)" RESET " :\n" DETAILED_HELP_DATABASES "\n"      \
 		 "Working strategy:\n" RESET " " BOLD "Simple Portfolio" RESET                                                 \
 		 ": Run backbone solvers in parallel with diversified configurations, sharing learnt clauses\n"               \

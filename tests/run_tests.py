@@ -291,6 +291,12 @@ BRUTEFORCE_CONFIGS = [
     ["-c=4", "-solver=mcsx", "-bb-maxsat-rounds=0,2", "-bb-share-cand=1"],
     ["-c=2", "-solver=m", "-bb-xor-pre=1", "-bb-maxsat-rounds=2,0", "-bb-no-flip"],
     ["-c=2", "-solver=m", "-bb-maxsat-patience=1,0", "-bb-share-cand=1"],
+    # d = CadiBackPartition (one block per d worker, worker i starts with block i), with and without the board
+    ["-c=1", "-solver=d"],
+    ["-c=4", "-solver=d", "-bb-chunk=0,1,10,1000000000", "-bb-share-cand=1"],
+    ["-c=3", "-solver=d", "-bb-chunk=1", "-bb-order=occ,random,reverse"],
+    ["-c=8", "-solver=ccdd", "-bb-chunk=0,10,1,0", "-bb-share-cand=1c", "-bb-share-units=10"],
+    ["-c=6", "-solver=dsx", "-bb-share-cand=1", "-bb-no-flip"],
     # whole portfolio: colador (-bb-chunk=0), paper K = infinity, sqrt, XOR pre-phase, XOR (x) and MaxSAT (m)
     ["-c=8", "-solver=ccccsxmm", "-bb-chunk=0,1000000000,10,0,0,0,0,0", "-bb-order=natural,natural,occ,random",
      "-bb-xor-pre=00010000", "-bb-share-cand=1", "-bb-share-units=1110"],

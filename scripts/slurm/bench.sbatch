@@ -11,6 +11,8 @@
 #   m  MaxSatBackbone: rounds of EvalMaxSAT on CaDiCaL, then the CadiBack loop
 #   x  DiverseBackboneSearch: XOR exploration on CryptoMiniSat, then the CadiBack loop on CryptoMiniSat
 #   p  CadiBack with the XOR exploration first, on CaDiCaL (-bb-xor-pre), then the CadiBack loop on the same solver
+#   d  CadiBackPartition: the candidates are split into one block per d worker (of all the ranks), the k-th d worker
+#      starts with block k, then k+1, ...; the blocks of the others come mostly decided through the candidate board
 # Experiments: a name made of these letters is the MIX itself (e.g. cp: half c, half p; cmxp: the four types), plus
 #   cadiback = c, xor = cx, maxsat = cxm (the mixes of the first campaigns)
 # Inside a type the configurations vary from one worker to the next (see "Worker configurations").
@@ -72,10 +74,10 @@ case $EXPERIMENT in
 cadiback) MIX=${MIX:-c} ;;
 xor) MIX=${MIX:-cx} ;;
 maxsat) MIX=${MIX:-cxm} ;;
-*[!cmxp]*) MIX=${MIX:?unknown EXPERIMENT $EXPERIMENT: set MIX (worker types c, m, x, p, e.g. cxm)} ;;
+*[!cmxpd]*) MIX=${MIX:?unknown EXPERIMENT $EXPERIMENT: set MIX (worker types c, m, x, p, d, e.g. cxm)} ;;
 *) MIX=${MIX:-$EXPERIMENT} ;;
 esac
-[[ $MIX =~ ^[cmxps]+$ ]] || { echo "invalid MIX=$MIX: expected worker types c, m, x, p, s" >&2; exit 1; }
+[[ $MIX =~ ^[cmxpsd]+$ ]] || { echo "invalid MIX=$MIX: expected worker types c, m, x, p, s, d" >&2; exit 1; }
 
 # Worker configurations, they vary from one worker of a type to the next. Two lists A and B are combined so that both
 # change from one worker to the next and every pair appears once in |A| * |B| workers: the k-th worker of a type takes
@@ -84,6 +86,7 @@ esac
 #   p     order x chunk, and XORs per round x density (6), counted separately
 #   x     XORs per round x density (6), and order k % |orders|
 #   m     order
+#   d     chunk k % |chunks|, and the order D_ORDER for all of them (the blocks are disjoint only in the same order)
 # Beyond the number of combinations they repeat with other seeds (the seed follows the worker id).
 CB_ORDERS=${CB_ORDERS:-natural random occ reverse occ-rev}
 CB_CHUNKS=${CB_CHUNKS:-0 10 1}               # 0: all candidates, 1: one by one, K: geometric growth
@@ -101,6 +104,7 @@ XOR_CONFL=${XOR_CONFL:-2x}                   # conflict budget of a node, x and 
 XOR_PATIENCE=${XOR_PATIENCE:-4x}             # x workers
 PRE_PATIENCE=${PRE_PATIENCE:-4x}             # p workers
 MAXSAT_ROUNDS=${MAXSAT_ROUNDS:-0}            # 0: until a round drops no candidate
+D_ORDER=${D_ORDER:-occ}                      # order of every d worker
 
 # Per-worker lists (one value per worker, the global solver id is the rank) -> backpainless arguments, and the table
 # of the workers (stdout of worker_table)
@@ -124,6 +128,7 @@ build_worker_args() {
 		o=${orders[k % ${#orders[@]}]} ch=0 xm=${ms[0]} xd=${dens[0]} pre=0 pat=$XOR_PATIENCE rounds=$XOR_ROUNDS
 		case $t in
 		c | s | p) ch=${chunks[$(pair $k ${#orders[@]} ${#chunks[@]})]} ;;
+		d) o=$D_ORDER ch=${chunks[k % ${#chunks[@]}]} ;;
 		esac
 		case $t in
 		x | p) xm=${ms[k % ${#ms[@]}]} xd=${dens[$(pair $k ${#ms[@]} ${#dens[@]})]} ;;
@@ -144,7 +149,7 @@ worker_table() {
 	for ((i = 0; i < WORKERS; i++)); do
 		t=${W_TYPE:i:1}
 		case $t in
-		c | s) printf "%d\t%s\t%s\t%s\t-\t-\t-\t-\n" $i "$t" "${W_ORDER[i]}" "${W_CHUNK[i]}" ;;
+		c | s | d) printf "%d\t%s\t%s\t%s\t-\t-\t-\t-\n" $i "$t" "${W_ORDER[i]}" "${W_CHUNK[i]}" ;;
 		p) printf "%d\tp\t%s\t%s\t%s\t%s\t%s\t%s\n" $i "${W_ORDER[i]}" "${W_CHUNK[i]}" "${W_XM[i]}" "${W_XD[i]}" "${W_PAT[i]}" "${W_ROUNDS[i]}" ;;
 		x) printf "%d\tx\t%s\t-\t%s\t%s\t%s\t%s\n" $i "${W_ORDER[i]}" "${W_XM[i]}" "${W_XD[i]}" "${W_PAT[i]}" "${W_ROUNDS[i]}" ;;
 		*) printf "%d\t%s\t%s\t-\t-\t-\t-\t-\n" $i "$t" "${W_ORDER[i]}" ;;
@@ -231,7 +236,7 @@ deadline=$((SECONDS + (left >= 0 ? left : 1 << 30)))
 worker_table >"$OUT/workers.tsv"
 {
 	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_WORKER MEM_PER_CPU EXCLUDE INSTANCES REPS TIMEOUT GSHR BINARY CB_ORDERS CB_CHUNKS XOR_MS \
-		XOR_DENSITIES XOR_ROUNDS PRE_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS EXTRA_ARGS total; do
+		XOR_DENSITIES XOR_ROUNDS PRE_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS D_ORDER EXTRA_ARGS total; do
 		printf '%s=%q\n' "$v" "${!v}"
 	done
 } >"$OUT/config.env"

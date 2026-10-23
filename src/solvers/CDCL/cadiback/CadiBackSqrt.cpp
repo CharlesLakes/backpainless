@@ -13,19 +13,30 @@ CadiBackSqrt::CadiBackSqrt(int id, const std::shared_ptr<ClauseDatabase>& clause
 	initializeTypeId<CadiBackSqrt>();
 }
 
+CadiBackSqrt::CadiBackSqrt(int id, const std::shared_ptr<ClauseDatabase>& clauseDB, BackboneSolverType type)
+	: CadiBackBase(id, clauseDB, type)
+{
+}
+
+size_t
+CadiBackSqrt::blockSize(size_t n) const
+{
+	return std::max<size_t>(1, (size_t)std::ceil(std::sqrt((double)n)));
+}
+
 void
 CadiBackSqrt::initCandidates(std::vector<int>& candidates)
 {
 	/* Blocks are consecutive in the initial order. Every later change of the candidates (filter, board, fixed,
 	 * backbone) keeps the order, so the remaining candidates of the lowest block are always a prefix */
 	const size_t n = candidates.size();
-	m_blockSize = std::max<size_t>(1, (size_t)std::ceil(std::sqrt((double)n)));
+	m_blockSize = std::max<size_t>(1, blockSize(n));
 	m_blockCount = (n + m_blockSize - 1) / m_blockSize;
 	m_currentBlock = NO_BLOCK;
 
 	m_blockOf.assign(m_nbVars + 1, NO_BLOCK);
 	for (size_t i = 0; i < n; i++)
-		m_blockOf[std::abs(candidates[i])] = i / m_blockSize;
+		m_blockOf[std::abs(candidates[i])] = blockOfPosition(i);
 
 	LOG1("%s %d: %zu blocks of %zu candidates", variantName(), this->getSolverId(), m_blockCount, m_blockSize);
 }
