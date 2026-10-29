@@ -2,18 +2,19 @@
 """Download benchmark instances from the Global Benchmark Database (benchmark-database.de).
 
 Usage:
-    python3 scripts/download_instances.py                         # the cluster and cadical lists, into instances/
-    python3 scripts/download_instances.py cluster                 # the 20 instances of the first cluster runs
-    python3 scripts/download_instances.py cadical --dry-run       # print what would be downloaded
-    python3 scripts/download_instances.py cadical-all --limit 30  # 30 instances that CaDiCaL solves fastest
-    python3 scripts/download_instances.py --select                # rebuild the cadical lists from the competition data
+    python3 scripts/download_instances.py                   # the example and main lists, into instances/
+    python3 scripts/download_instances.py example           # the 20 instances for quick runs
+    python3 scripts/download_instances.py main --dry-run    # print what would be downloaded
+    python3 scripts/download_instances.py all --limit 30    # 30 instances that CaDiCaL solves fastest
+    python3 scripts/download_instances.py --select          # rebuild main and all from the competition data
 
 The lists live in scripts/benchmarks/ (one instance per line, the GBD hash in the first column):
-    cluster.tsv           the instances of the Slurm campaigns (scripts/slurm)
-    sc-cadical-1800.tsv   (cadical-all) main track instances of the SAT Competitions 2022-2024 that CaDiCaL solved in
+    example.tsv           (example) 20 instances for quick runs and first tests of a configuration
+    sc-cadical-1800.tsv   (all) main track instances of the SAT Competitions 2022-2024 that CaDiCaL solved in
                           at most 1800 s, with a verified result (SAT only by default: an UNSAT formula has no backbone)
-    sc-cadical-100.tsv    (cadical) 100 of them, not in cluster.tsv, spread over the families, the years and the
-                          CaDiCaL times (as many in each of 0-10, 10-60, 60-300 and 300-1800 s)
+    sc-cadical-100.tsv    (main) 100 of them, not in example.tsv, spread over the families, the years and the CaDiCaL
+                          times (as many in each of 0-10, 10-60, 60-300 and 300-1800 s): the benchmark set the
+                          conclusions are drawn from
 
 The files are saved as <hash>-<name>.cnf.xz, the name given by GBD, and existing files are skipped.
 The SAT Competition 2025 published no per-instance results, so the selection uses 2022-2024, the last three
@@ -36,7 +37,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LISTS = os.path.join(ROOT, "scripts", "benchmarks")
 GBD_FILE = "https://benchmark-database.de/file/{}"
 GBD_META = "https://benchmark-database.de/getdatabase/meta"
-LIST_FILES = {"cluster": "cluster", "cadical": "sc-cadical-100", "cadical-all": "sc-cadical-1800"}
+LIST_FILES = {"example": "example", "main": "sc-cadical-100", "all": "sc-cadical-1800"}
 TIME_BUCKETS = [10, 60, 300]
 
 # Per competition: detailed results of the main track (hash x solver -> seconds, 10000 = timeout), the CaDiCaL column,
@@ -190,15 +191,15 @@ def download(row, dest, dry_run):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("lists", nargs="*", choices=sorted(LIST_FILES),
-                        help="lists to download (default: cluster and cadical)")
+                        help="lists to download (default: example and main)")
     parser.add_argument("--dest", default=os.path.join(ROOT, "instances"), help="directory (default: instances/)")
-    parser.add_argument("--limit", type=int, help="only the N instances of a cadical list that CaDiCaL solves fastest")
+    parser.add_argument("--limit", type=int, help="only the N instances of main or all that CaDiCaL solves fastest")
     parser.add_argument("--max-time", type=float, help="only instances that CaDiCaL solves within this time (s)")
     parser.add_argument("--dry-run", action="store_true", help="print the instances without downloading them")
     parser.add_argument("-j", "--jobs", type=int, default=4, help="parallel downloads (default: 4)")
     parser.add_argument("--select", action="store_true",
-                        help="rebuild the cadical lists of scripts/benchmarks/ from the competition results and exit")
-    parser.add_argument("--select-count", type=int, default=100, help="size of the cadical list (default: 100)")
+                        help="rebuild the main and all lists of scripts/benchmarks/ from the competition results and exit")
+    parser.add_argument("--select-count", type=int, default=100, help="size of the main list (default: 100)")
     parser.add_argument("--select-time", type=float, default=1800, help="time limit of --select (default: 1800 s)")
     parser.add_argument("--select-unsat", action="store_true", help="--select also keeps UNSAT instances")
     parser.add_argument("--select-years", type=int, nargs="+", default=sorted(COMPETITIONS),
@@ -207,17 +208,17 @@ def main():
 
     if opts.select:
         rows = select(opts.select_time, {"sat", "unsat"} if opts.select_unsat else {"sat"}, opts.select_years)
-        picked = spread(rows, opts.select_count, {r["hash"] for r in read_list("cluster")})
-        for name, part in [("cadical-all", rows), ("cadical", picked)]:
+        picked = spread(rows, opts.select_count, {r["hash"] for r in read_list("example")})
+        for name, part in [("all", rows), ("main", picked)]:
             path = os.path.join(LISTS, LIST_FILES[name] + ".tsv")
             write_list(path, part)
             print(f"written {os.path.relpath(path, ROOT)} ({len(part)} instances)", file=sys.stderr)
         return 0
 
     rows = []
-    for name in dict.fromkeys(opts.lists or ["cluster", "cadical"]):
+    for name in dict.fromkeys(opts.lists or ["example", "main"]):
         part = read_list(LIST_FILES[name])
-        if name != "cluster":
+        if name != "example":
             if opts.max_time is not None:
                 part = [r for r in part if float(r["cadical_seconds"]) <= opts.max_time]
             part = part[:opts.limit] if opts.limit is not None else part

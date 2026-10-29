@@ -85,10 +85,11 @@ instance and broadcasts it, so the other nodes never touch the file.
 `scripts/download_instances.py` downloads them from the Global Benchmark Database (lists in `scripts/benchmarks/`):
 
 ```bash
-python3 scripts/download_instances.py cluster      # the 20 instances of the previous campaigns
-python3 scripts/download_instances.py cadical      # 100 SAT instances of the SAT Competitions 2022-2024 that CaDiCaL
-                                                   # solved in <= 1800 s (max 1693 s), 25 per time range, ~1.1 GB
-python3 scripts/download_instances.py cadical-all --max-time 600 --dry-run   # the 358 instances of the pool
+python3 scripts/download_instances.py example      # 20 instances for quick runs and first tests
+python3 scripts/download_instances.py main         # the benchmark set for conclusions: 100 SAT instances of the
+                                                   # SAT Competitions 2022-2024 that CaDiCaL solved in <= 1800 s
+                                                   # (max 1693 s), 25 per time range, ~1.1 GB
+python3 scripts/download_instances.py all --max-time 600 --dry-run   # the 358 instances of the pool
 ```
 
 For a first test, a small instance with a non-empty backbone is the most useful: e.g. SATLIB `uf250-06.cnf` (backbone
