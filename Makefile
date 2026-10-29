@@ -28,8 +28,11 @@ endif
 COMMON_FLAGS += $(CPP_STD_FLAG)
 
 # Define debug and release flags 
+# ARCH_FLAGS (empty: generic x86-64) is added to the release build and CryptoMiniSat, e.g. ARCH_FLAGS=-march=native
+# (scripts/slurm/build_native.sh builds one binary per CPU of the cluster nodes with it)
+ARCH_FLAGS :=
 DEBUG_FLAGS := $(COMMON_FLAGS) -g3 -O0 #-fsanitize=thread#-Wall -Wextra
-RELEASE_FLAGS := $(COMMON_FLAGS) -O3 -DNDEBUG
+RELEASE_FLAGS := $(COMMON_FLAGS) -O3 -DNDEBUG $(ARCH_FLAGS)
 
 
 # Directories
@@ -210,7 +213,7 @@ CMS_CSRCS := $(addprefix $(CMS_DIR)/src/, picosat/picosat.c picosat/version.c)
 CMS_OBJS := $(CMS_SRCS:$(CMS_DIR)/src/%.cpp=$(CMS_BUILD)/%.o) $(CMS_CSRCS:$(CMS_DIR)/src/%.c=$(CMS_BUILD)/%.o) \
 	$(CMS_BUILD)/GitSHA1.o
 CMS_DEFINES := -DNDEBUG -DRDB0_ONLY_FEATURES -DTRACE -DUSE_ZLIB -I$(CMS_DIR) -I$(CMS_DIR)/src -w
-CMS_CXXFLAGS := -std=c++17 -O3 -pthread $(CMS_DEFINES)
+CMS_CXXFLAGS := -std=c++17 -O3 -pthread $(ARCH_FLAGS) $(CMS_DEFINES)
 
 $(CMS_BUILD)/libcryptominisat5.a: $(CMS_OBJS)
 	ar rcs $@ $^
@@ -229,7 +232,7 @@ $(CMS_BUILD)/%.o: $(CMS_DIR)/src/%.cpp
 
 $(CMS_BUILD)/%.o: $(CMS_DIR)/src/%.c
 	@mkdir -p $(@D)
-	$(CC) -c $< -o $@ -O3 $(CMS_DEFINES)
+	$(CC) -c $< -o $@ -O3 $(ARCH_FLAGS) $(CMS_DEFINES)
 
 $(MAPLE_BUILD)/libmapleCOMSPS.a:
 	$(MAKE) -C $(SOLVERS_DIR)/mapleCOMSPS r

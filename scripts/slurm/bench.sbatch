@@ -23,6 +23,10 @@
 #   scripts/slurm/collect.sh runs/<experiment dir>...                   # summary
 # A resubmission with the same configuration and OUT skips the runs that already have a row.
 #
+# Binaries: with NATIVE=1 (default) every rank runs the binary built for the processor of its node, bin/node/<node>
+# (scripts/slurm/native.sh); build them before, apart from the measured jobs, with scripts/slurm/build_native.sh --slurm.
+# The nodes without one are excluded from the job. NATIVE=0: the generic BINARY on every node.
+#
 # Time limits: -t=TIMEOUT per run (killed 60 s after it if it does not stop); the job's --time is computed from the
 # number of runs, TIMEOUT + RUN_SLACK each, + JOB_SLACK, and capped to the time limit of the partition. A run starts
 # only if it can finish before the time limit; the others are left for a resubmission.
@@ -53,7 +57,9 @@ EXCLUDE=${EXCLUDE-node906,node907}          # --exclude: nodes never used (empty
 INSTANCES=${INSTANCES:-instances}           # directory with *.cnf / *.cnf.xz / *.cnf.gz / *.cnf.bz2
 REPS=${REPS:-1}
 TIMEOUT=${TIMEOUT:-900}                     # -t of backpainless, seconds
-BINARY=${BINARY:-./backpainless}
+BINARY=${BINARY:-./backpainless}           # NATIVE=0 only
+NATIVE=${NATIVE:-1}                         # 1: bin/node/<node> of build_native.sh on each node (see the top)
+NATIVE_BIN=${NATIVE_BIN:-bin}               # directory of build_native.sh
 GSHR=${GSHR:-1}                             # -gshr-strat: 1 AllGather, 2 Mallob, 3 ring
 PARTITION=${PARTITION:-solver}              # must match --partition (time limit of the partition)
 ACCOUNT=${ACCOUNT:-solver}                  # must match --account
@@ -194,6 +200,16 @@ if [[ -z ${SLURM_JOB_ID:-} ]]; then
 	OUT=${OUT:-runs/$LABEL}
 	echo "$LABEL ($MIX): ${#files[@]} instances x $REPS reps = $total runs, $pending to do in $OUT"
 	((pending)) || exit 0
+	if ((NATIVE)) && command -v sinfo >/dev/null; then
+		# nodes of the partition without a native binary: excluded, the job never lands on them
+		mapfile -t missing < <(sinfo -h -N -p "$PARTITION" -o '%N' | sort -u |
+			while read -r n; do [[ ,$EXCLUDE, == *,$n,* || -x $NATIVE_BIN/node/$n ]] || echo "$n"; done)
+		if ((${#missing[@]})); then
+			echo "  WARNING no native binary for ${missing[*]}: excluded (scripts/slurm/build_native.sh --slurm" \
+				"${missing[*]})" >&2
+			EXCLUDE=$(IFS=,; echo "${EXCLUDE:+$EXCLUDE,}${missing[*]}")
+		fi
+	fi
 	limit=$((pending * (TIMEOUT + RUN_SLACK) + JOB_SLACK))
 	echo "  $WORKERS workers x ($CPUS CPUs, $MEM_PER_WORKER = $CPUS x $MEM_PER_CPU), -t=$TIMEOUT per run: time limit" \
 		"$(to_hms $limit)${EXCLUDE:+, excluding $EXCLUDE}"
@@ -235,7 +251,7 @@ left=$(to_secs "$(squeue -h -j "$SLURM_JOB_ID" -o '%L' 2>/dev/null || true)")
 deadline=$((SECONDS + (left >= 0 ? left : 1 << 30)))
 worker_table >"$OUT/workers.tsv"
 {
-	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_WORKER MEM_PER_CPU EXCLUDE INSTANCES REPS TIMEOUT GSHR BINARY CB_ORDERS CB_CHUNKS XOR_MS \
+	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_WORKER MEM_PER_CPU EXCLUDE INSTANCES REPS TIMEOUT GSHR BINARY NATIVE CB_ORDERS CB_CHUNKS XOR_MS \
 		XOR_DENSITIES XOR_ROUNDS PRE_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS D_ORDER EXTRA_ARGS total; do
 		printf '%s=%q\n' "$v" "${!v}"
 	done
@@ -249,6 +265,26 @@ read -ra launcher <<<"$LAUNCHER"
 read -ra extra <<<"$EXTRA_ARGS"
 # process names of the ranks: the name the binary is run by (./backpainless, a symlink) and the file it points to
 binary_names="$(basename "$BINARY") $(basename "$(readlink -f "$BINARY")")"
+program=("$BINARY")
+if ((NATIVE)); then
+	# every node of the job must have its binary (the plan excludes the others): node -> binary in native.tsv
+	missing=()
+	for n in $(scontrol show hostnames "$SLURM_JOB_NODELIST"); do
+		if [[ -x $NATIVE_BIN/node/$n ]]; then
+			printf "%s\t%s\n" "$n" "$(readlink -f "$NATIVE_BIN/node/$n")"
+		else
+			missing+=("$n")
+		fi
+	done >"$OUT/native.tsv"
+	if ((${#missing[@]})); then
+		echo "ERROR no native binary for ${missing[*]}: scripts/slurm/build_native.sh --slurm ${missing[*]}," \
+			"or NATIVE=0" >&2
+		exit 1
+	fi
+	echo "native binaries in $OUT/native.tsv"
+	program=(bash scripts/slurm/native.sh)
+	binary_names+=" backpainless"
+fi
 
 # Kills the processes of this job that a killed run may have left on the nodes (ranks, Open MPI daemons), so that the
 # next run can start. Only processes whose environment holds this job's id: other jobs on the same node are untouched.
@@ -326,7 +362,7 @@ for ((task = 0; task < total; task++)); do
 	rankdir=$OUT/ranks/$task
 	launch=("${launcher[@]}")
 	[[ ${launcher[0]##*/} == mpirun ]] && launch+=(--output-filename "$rankdir")
-	cmd=("${launch[@]}" "$BINARY" "$input" "${WORKER_ARGS[@]}" "${extra[@]}" "-t=$TIMEOUT")
+	cmd=("${launch[@]}" "${program[@]}" "$input" "${WORKER_ARGS[@]}" "${extra[@]}" "-t=$TIMEOUT")
 	echo "c task $task: ${cmd[*]}" >"$log"
 	# stack limit of the job: the default stack of a thread follows it (2 MB when unlimited)
 	echo "c ulimit -s: $(ulimit -s)" >>"$log"
