@@ -82,6 +82,15 @@ Put the instances in `instances/` at the repository root (`INSTANCES=<dir>` sele
 `*.cnf`, `*.cnf.xz`, `*.cnf.gz`, `*.cnf.bz2`, compressed files are decompressed by the job. Only MPI rank 0 reads the
 instance and broadcasts it, so the other nodes never touch the file.
 
+`scripts/download_instances.py` downloads them from the Global Benchmark Database (lists in `scripts/benchmarks/`):
+
+```bash
+python3 scripts/download_instances.py cluster      # the 20 instances of the previous campaigns
+python3 scripts/download_instances.py cadical      # 100 SAT instances of the SAT Competitions 2022-2024 that CaDiCaL
+                                                   # solved in <= 1800 s (max 1693 s), 25 per time range, ~1.1 GB
+python3 scripts/download_instances.py cadical-all --max-time 600 --dry-run   # the 358 instances of the pool
+```
+
 For a first test, a small instance with a non-empty backbone is the most useful: e.g. SATLIB `uf250-06.cnf` (backbone
 of 10 literals, a few seconds). `ais12.cnf` is a good speed test, but its backbone is empty (`b 0` only).
 
