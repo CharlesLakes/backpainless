@@ -76,6 +76,47 @@ srun -p <partition> -A <account> -n1 -c4 ./backpainless examples/backbone_demo.c
 The binary is generic x86-64 (no `-march=native`), so building on the login node is fine even if its CPU differs
 from the compute nodes.
 
+### Binaries optimized for each node
+
+The jobs run, by default (`NATIVE=1`), every rank with a binary built with `-march=native` (backpainless, CaDiCaL and
+CryptoMiniSat) for the processor of its node. Build them **before** the benchmarks, apart from the measured jobs:
+
+```bash
+bash scripts/slurm/build_native.sh --slurm                  # every node of the partition, one srun per node
+bash scripts/slurm/build_native.sh --slurm node910 node911  # only these nodes (busy ones, new ones)
+bash scripts/slurm/build_native.sh --list                   # what is built, and for which nodes
+```
+
+- `bin/<cpu>/backpainless`: one binary per processor type (`<cpu>` is a hash of the model and flags of
+  `/proc/cpuinfo`), with `bin/<cpu>/cpu.txt` (model, `-march` chosen by gcc, compiler, commit). Only the first node of
+  each type compiles (2-5 minutes), the others only get their link.
+- `bin/node/<node>`: link to the binary of the processor of that node, the one the ranks run
+  (`scripts/slurm/native.sh`). Each job writes the binary of each of its nodes to `native.tsv`.
+- A busy node is skipped (`IMMEDIATE`, 120 s): run `--slurm` again with that node later.
+- Nodes without a binary: `bench.sbatch` excludes them from the job (warning in the plan). A job that still has one
+  stops before the first run. `NATIVE=0` runs the generic `BINARY` everywhere, as before.
+- The binaries are built with the commit of the repository at that time: after `git pull` of a change in the sources,
+  run `build_native.sh --slurm --force` again.
+
+The build exports the paths of Boost and zlib installed by `install_deps.sh` or by hand in `~/opt`, as above: it
+sources `~/opt/env.sh` when it exists, else it exports `~/opt/boost_1_86_0` and `~/opt/zlib`, if they exist. To change
+them (also with `--slurm`, passed on to every node):
+
+| Option | Environment | |
+|---|---|---|
+| `--deps <dir>` | `DEPS` | the same layout in another directory (`<dir>/env.sh`, or `<dir>/boost_1_86_0` and `<dir>/zlib`) |
+| `--boost <dir>` | `BOOST_DIR` | directory of the Boost headers (the one that contains `boost/`) |
+| `--zlib <prefix>` | `ZLIB_DIR` | zlib prefix (`include/zlib.h`, `lib/libz.a`) |
+| `--env <file>` | `ENV_FILE` | file sourced before the build, e.g. with `module load gcc openmpi` |
+| `--no-deps` | | no export: the environment of the shell as it is |
+
+`--slurm` also reads `PARTITION`, `ACCOUNT`, `EXCLUDE` (same defaults as the jobs), `BUILD_CPUS` (8) and `BUILD_TIME`
+(minutes, 60). The rank output starts with `c native binary on <node>: <binary>`.
+
+`-march=native` can change floating point rounding (fused multiply-add), so a native run may take another path of the
+search than the generic binary: the backbone is the same, only the times differ. Compare configurations run with
+the same kind of binary.
+
 ## 3. Instances
 
 Put the instances in `instances/` at the repository root (`INSTANCES=<dir>` selects another directory). Accepted:
@@ -257,6 +298,8 @@ TIMEOUT=300 MEM_PER_WORKER=8G XOR_ROUNDS=200 bash scripts/slurm/submit.sh --subm
 | `INSTANCES` | `instances` | directory of the instances |
 | `REPS` | 1 | runs of each instance (repetitions use the same seeds and only measure the noise of the parallel run) |
 | `TIMEOUT` | 900 | time limit of each run (one instance), in seconds: `-t` of backpainless |
+| `NATIVE` | 1 | 1: binary of `bin/node/<node>` on each node (`build_native.sh`), 0: `BINARY` on every node |
+| `BINARY` | `./backpainless` | binary of `NATIVE=0` |
 | `PARTITION`, `ACCOUNT` | `solver`, `solver` | Slurm partition and account |
 | `CPUS` | 4 | CPUs per worker |
 | `MEM_PER_WORKER` | `15G` | memory of each worker, requested as `--mem-per-cpu` = `MEM_PER_WORKER` / `CPUS` (3840M) |

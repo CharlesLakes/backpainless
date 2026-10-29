@@ -129,6 +129,7 @@ solvers/kissat-inc/build
 *.csv
 
 build/
+bin/
 solvers/yalsat/yalsat
 *.la
 config.status
