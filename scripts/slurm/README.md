@@ -148,6 +148,8 @@ types, one letter per type, and the number is the total number of workers. The l
 | `m` | MaxSatBackbone on CaDiCaL (`-solver=m`) | rounds of EvalMaxSAT, then the CadiBack loop |
 | `x` | DiverseBackboneSearch on CryptoMiniSat (`-solver=x`) | XOR exploration, then the CadiBack loop on CryptoMiniSat |
 | `p` | CadiBack on CaDiCaL with `-bb-xor-pre` | XOR exploration on CaDiCaL, then the CadiBack loop on the same solver |
+| `d` | CadiBackPartition on CaDiCaL (`-solver=d`) | the variables split into one block per `d` worker, the same blocks on every worker; the k-th starts with block k |
+| `s` | CadiBackSqrt on CaDiCaL (`-solver=s`) | the CadiBack loop block by block, sqrt(#candidates) blocks |
 
 | Experiment | 8 workers | 16 workers | 24 workers |
 |---|---|---|---|
@@ -278,6 +280,47 @@ CAMPAIGN=mixes bash scripts/slurm/submit.sh --submit all-8
 bash scripts/slurm/collect.sh runs/mixes
 ```
 
+### Sharing
+
+`SHARE` measures what each part of the sharing brings, with the same configuration:
+
+| `SHARE` | Learnt clauses | Backbone (units, board) | Free variables (board) | Arguments |
+|---|---|---|---|---|
+| `all` | yes | yes | yes | `-bb-share-cand=1` |
+| `no-clauses` | no | yes | yes | `-bb-share-learnt=0` |
+| `no-backbones` | yes | no | yes | `-bb-share-units=0 -bb-share-cand-kind=free` |
+| `no-free` | yes | yes | no | `-bb-share-cand-kind=backbone` |
+| `none` | no | no | no | `-bb-share-learnt=0 -bb-share-units=0 -bb-share-cand=0` |
+
+```bash
+SHARE=none bash scripts/slurm/submit.sh --submit cmxpd-16     # runs/<campaign>/cmxpd+none-16
+```
+
+### Estudio 6
+
+`scripts/slurm/studies/estudio6.sh` runs the campaign of the 6 best portfolios of estudios 4 and 5 (cmxpd, cmx, cmxp,
+mxp, mx, cmp) on the `main` list, by phases in order of priority, all in `runs/estudio6` (`TIMEOUT=3600`):
+
+| Phase | Question | Configurations |
+|---|---|---|
+| 1 | the 6 best | the 6 mixes, 16 workers |
+| 2 | partition | `d`, `s`, `c`, `cd`, 16 workers (and `cmxpd` vs `cmxp` of phase 1) |
+| 3 | sharing | `cmxpd-16` with `SHARE` = `no-clauses`, `no-backbones`, `no-free`, `none` |
+| 4 | diversity | `m`, `x`, `p`, 16 workers (one type per portfolio; `c`, `d`, `s` in phase 2) |
+| 5, 6 | more workers | phases 1, 2 and 4 with 8 and with 4 workers |
+
+```bash
+python3 scripts/download_instances.py main --dest instances/main
+bash scripts/slurm/build_native.sh --slurm --force
+bash scripts/slurm/studies/estudio6.sh                  # plan of every phase
+bash scripts/slurm/studies/estudio6.sh --submit 1 2     # phases 1 and 2
+bash scripts/slurm/collect.sh runs/estudio6
+```
+
+A 16-worker job takes 16 of the 18 4-CPU nodes, so these jobs run one at a time (8-worker jobs two at a time, 4-worker
+jobs four at a time). With 3600 s, a job of 100 instances lasts from about 1.5 days (half of them solved) to 4.3 days
+(100 × 3720 s). With 4 workers `cmxpd` cycles c, m, x, p (no `d`), with 8 it has a single `d`.
+
 With 4 CPUs per worker, 24 workers need 96 CPUs. Slurm places the workers on the nodes that are not excluded
 (`EXCLUDE`, `node906,node907` by default) wherever there are free CPUs and memory. On the `solver` partition this
 leaves the 4-CPU nodes node910-927: one worker per node, so at most 18 workers in total (18 × 4 = 72 CPUs). A larger
@@ -317,6 +360,8 @@ TIMEOUT=300 MEM_PER_WORKER=8G XOR_ROUNDS=200 bash scripts/slurm/submit.sh --subm
 | `XOR_CONFL` | `2x` | conflict budget of an XOR node (`-bb-xor-confl`) |
 | `MAXSAT_ROUNDS` | 0 | MaxSAT rounds of the `m` workers, 0: until a round drops nothing |
 | `GSHR` | 1 | global sharing: 1 AllGather, 2 Mallob, 3 ring |
+| `SHARE` | `all` | what the workers share: `all`, `no-clauses`, `no-backbones`, `no-free`, `none` (added to the name: `cmxpd+none-16`) |
+| `D_ORDER` | `occ` | candidate order of every `d` worker (inside its blocks) |
 | `EXTRA_ARGS` | | added to every run, e.g. `-bb-share-cand-local` |
 | `LAUNCHER` | `mpirun --bind-to none -np N` | e.g. `srun --mpi=pmix` if the cluster's MPI requires `srun` |
 | `STARTUP_TIMEOUT` | 180 | seconds for the MPI ranks to start; after that the run is killed and retried |
