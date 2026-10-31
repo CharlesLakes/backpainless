@@ -19,6 +19,8 @@
 bool
 CadiBackBase::learning(int size, int glue)
 {
+	if (!m_shareLearnt)
+		return false;
 	if (size > 0) {
 		LOGDEBUG3("CadiBack %d will export clause of size %d, glue %d", this->getSolverId(), size, glue);
 		tempClause.reserve(size);
@@ -320,7 +322,7 @@ CadiBackBase::addBackboneLiteral(int lit)
 {
 	m_backbone.push_back(lit);
 
-	if (m_publishCandidates && m_candidateBoard->publishBackbone(lit))
+	if (publishesBackbone() && m_candidateBoard->publishBackbone(lit))
 		m_publishedBackbone++;
 
 	if (!m_shareBackboneUnits)
@@ -338,7 +340,7 @@ CadiBackBase::addBackboneLiteral(int lit)
 void
 CadiBackBase::addFreeVariable(int lit)
 {
-	if (m_publishCandidates && m_candidateBoard->publishFree(lit))
+	if (publishesFree() && m_candidateBoard->publishFree(lit))
 		m_publishedFree++;
 }
 

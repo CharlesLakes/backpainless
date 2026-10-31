@@ -11,8 +11,12 @@
 #   m  MaxSatBackbone: rounds of EvalMaxSAT on CaDiCaL, then the CadiBack loop
 #   x  DiverseBackboneSearch: XOR exploration on CryptoMiniSat, then the CadiBack loop on CryptoMiniSat
 #   p  CadiBack with the XOR exploration first, on CaDiCaL (-bb-xor-pre), then the CadiBack loop on the same solver
-#   d  CadiBackPartition: the candidates are split into one block per d worker (of all the ranks), the k-th d worker
-#      starts with block k, then k+1, ...; the blocks of the others come mostly decided through the candidate board
+#   d  CadiBackPartition: the variables are split into one block per d worker (of all the ranks), the same blocks on
+#      every worker; the k-th d worker starts with block k, then k+1, ...; the blocks of the others come mostly
+#      decided through the candidate board
+#   s  CadiBackSqrt: the CadiBack loop block by block, sqrt(#candidates) blocks
+# Sharing: SHARE=all (default), no-clauses, no-backbones, no-free or none (see "Configuration"); a profile other than
+#   all is added to the name of the experiment, e.g. cmxpd+no-free-16.
 # Experiments: a name made of these letters is the MIX itself (e.g. cp: half c, half p; cmxp: the four types), plus
 #   cadiback = c, xor = cx, maxsat = cxm (the mixes of the first campaigns)
 # Inside a type the configurations vary from one worker to the next (see "Worker configurations").
@@ -63,7 +67,20 @@ NATIVE_BIN=${NATIVE_BIN:-bin}               # directory of build_native.sh
 GSHR=${GSHR:-1}                             # -gshr-strat: 1 AllGather, 2 Mallob, 3 ring
 PARTITION=${PARTITION:-solver}              # must match --partition (time limit of the partition)
 ACCOUNT=${ACCOUNT:-solver}                  # must match --account
-LABEL=${LABEL:-$EXPERIMENT-$WORKERS}        # name of the experiment in the results
+# What the workers share (all = learnt clauses, backbone units and the whole candidate board), to measure the effect
+# of each part: no-clauses (-bb-share-learnt=0), no-backbones (no backbone units, only free variables on the board),
+# no-free (only backbone literals on the board), none (nothing at all)
+SHARE=${SHARE:-all}
+case $SHARE in
+all) SHARE_ARGS=(-bb-share-cand=1) ;;
+no-clauses) SHARE_ARGS=(-bb-share-cand=1 -bb-share-learnt=0) ;;
+no-backbones) SHARE_ARGS=(-bb-share-cand=1 -bb-share-units=0 -bb-share-cand-kind=free) ;;
+no-free) SHARE_ARGS=(-bb-share-cand=1 -bb-share-cand-kind=backbone) ;;
+none) SHARE_ARGS=(-bb-share-cand=0 -bb-share-learnt=0 -bb-share-units=0) ;;
+*) echo "invalid SHARE=$SHARE: expected all, no-clauses, no-backbones, no-free or none" >&2; exit 1 ;;
+esac
+[[ $SHARE == all ]] && SHARE_TAG= || SHARE_TAG=+$SHARE
+LABEL=${LABEL:-$EXPERIMENT$SHARE_TAG-$WORKERS} # name of the experiment in the results
 SERIAL=${SERIAL:-0}                         # 1: --dependency=singleton, jobs of the same JOB_NAME run one at a time
 JOB_NAME=${JOB_NAME:-backpainless}
 EXTRA_ARGS=${EXTRA_ARGS:-}                  # added to every run, e.g. "-bb-share-cand-local"
@@ -80,7 +97,7 @@ case $EXPERIMENT in
 cadiback) MIX=${MIX:-c} ;;
 xor) MIX=${MIX:-cx} ;;
 maxsat) MIX=${MIX:-cxm} ;;
-*[!cmxpd]*) MIX=${MIX:?unknown EXPERIMENT $EXPERIMENT: set MIX (worker types c, m, x, p, d, e.g. cxm)} ;;
+*[!cmxpds]*) MIX=${MIX:?unknown EXPERIMENT $EXPERIMENT: set MIX (worker types c, m, x, p, d, s, e.g. cxm)} ;;
 *) MIX=${MIX:-$EXPERIMENT} ;;
 esac
 [[ $MIX =~ ^[cmxpsd]+$ ]] || { echo "invalid MIX=$MIX: expected worker types c, m, x, p, s, d" >&2; exit 1; }
@@ -145,7 +162,7 @@ build_worker_args() {
 	done
 	local IFS=,
 	WORKER_ARGS=(-dist "-gshr-strat=$GSHR" -c=1 "-solver=$W_SOLVER" "-bb-order=${W_ORDER[*]}"
-		"-bb-chunk=${W_CHUNK[*]}" -bb-share-cand=1 "-bb-xor-m=${W_XM[*]}" "-bb-xor-density=${W_XD[*]}"
+		"-bb-chunk=${W_CHUNK[*]}" "${SHARE_ARGS[@]}" "-bb-xor-m=${W_XM[*]}" "-bb-xor-density=${W_XD[*]}"
 		"-bb-xor-rounds=${W_ROUNDS[*]}" "-bb-xor-patience=${W_PAT[*]}" "-bb-xor-confl=$XOR_CONFL" "-bb-xor-pre=$W_PRE"
 		"-bb-maxsat-rounds=$MAXSAT_ROUNDS")
 }
@@ -252,7 +269,7 @@ deadline=$((SECONDS + (left >= 0 ? left : 1 << 30)))
 worker_table >"$OUT/workers.tsv"
 {
 	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_WORKER MEM_PER_CPU EXCLUDE INSTANCES REPS TIMEOUT GSHR BINARY NATIVE CB_ORDERS CB_CHUNKS XOR_MS \
-		XOR_DENSITIES XOR_ROUNDS PRE_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS D_ORDER EXTRA_ARGS total; do
+		XOR_DENSITIES XOR_ROUNDS PRE_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS D_ORDER SHARE EXTRA_ARGS total; do
 		printf '%s=%q\n' "$v" "${!v}"
 	done
 } >"$OUT/config.env"
