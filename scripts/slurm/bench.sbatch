@@ -11,8 +11,10 @@
 #   m  MaxSatBackbone: rounds of EvalMaxSAT on CaDiCaL, then the CadiBack loop
 #   x  DiverseBackboneSearch: XOR exploration on CryptoMiniSat, then the CadiBack loop on CryptoMiniSat
 #   p  CadiBack with the XOR exploration first, on CaDiCaL (-bb-xor-pre), then the CadiBack loop on the same solver
-#   d  CadiBackPartition: the candidates are split into one block per d worker (of all the ranks), the k-th d worker
-#      starts with block k, then k+1, ...; the blocks of the others come mostly decided through the candidate board
+#   d  CadiBackPartition: the variables are split into one block per d worker (of all the ranks), the same blocks on
+#      every worker; the k-th d worker starts with block k, then k+1, ...; the blocks of the others come mostly
+#      decided through the candidate board
+#   s  CadiBackSqrt: the CadiBack loop block by block, sqrt(#candidates) blocks
 # Sharing: SHARE=all (default), no-clauses, no-backbones, no-free or none (see "Configuration"); a profile other than
 #   all is added to the name of the experiment, e.g. cmxpd+no-free-16.
 # Experiments: a name made of these letters is the MIX itself (e.g. cp: half c, half p; cmxp: the four types), plus
@@ -95,7 +97,7 @@ case $EXPERIMENT in
 cadiback) MIX=${MIX:-c} ;;
 xor) MIX=${MIX:-cx} ;;
 maxsat) MIX=${MIX:-cxm} ;;
-*[!cmxpd]*) MIX=${MIX:?unknown EXPERIMENT $EXPERIMENT: set MIX (worker types c, m, x, p, d, e.g. cxm)} ;;
+*[!cmxpds]*) MIX=${MIX:?unknown EXPERIMENT $EXPERIMENT: set MIX (worker types c, m, x, p, d, s, e.g. cxm)} ;;
 *) MIX=${MIX:-$EXPERIMENT} ;;
 esac
 [[ $MIX =~ ^[cmxpsd]+$ ]] || { echo "invalid MIX=$MIX: expected worker types c, m, x, p, s, d" >&2; exit 1; }
