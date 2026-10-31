@@ -297,6 +297,7 @@ BRUTEFORCE_CONFIGS = [
     ["-c=3", "-solver=d", "-bb-chunk=1", "-bb-order=occ,random,reverse"],
     ["-c=8", "-solver=ccdd", "-bb-chunk=0,10,1,0", "-bb-share-cand=1c", "-bb-share-units=10"],
     ["-c=6", "-solver=dsx", "-bb-share-cand=1", "-bb-no-flip"],
+    ["-c=4", "-solver=d", "-bb-order=occ,natural,random,reverse", "-bb-chunk=0,1", "-bb-share-cand=1"],
     # whole portfolio: colador (-bb-chunk=0), paper K = infinity, sqrt, XOR pre-phase, XOR (x) and MaxSAT (m)
     ["-c=8", "-solver=ccccsxmm", "-bb-chunk=0,1000000000,10,0,0,0,0,0", "-bb-order=natural,natural,occ,random",
      "-bb-xor-pre=00010000", "-bb-share-cand=1", "-bb-share-units=1110"],
@@ -393,6 +394,52 @@ def suite_sharing(opts, report, workdir):
         # a single run may end before the first round, but at least one per instance must exchange clauses
         report.record(f"{name} clauses were exchanged",
                       None if exchanged_somewhere else "no configuration shared any clause")
+    suite_partition(opts, report, workdir)
+
+
+PART_LOG = re.compile(r"CadiBackPartition (\d+): part (\d+) of (\d+), \d+ of its \d+ candidates in it, "
+                      r"partition signature ([0-9a-f]{16})")
+
+
+def check_partition(run, nb_parts):
+    """Error message unless the d workers that logged their part (-v=1) share one partition (same signature, same
+    number of parts) and own distinct parts. A worker interrupted before its first model logs nothing."""
+    logs = {int(w): (int(part), int(count), sig) for w, part, count, sig in PART_LOG.findall(run.stdout)}
+    if len(logs) < 2:
+        return f"only {len(logs)} d workers logged their part"
+    if {count for _, count, _ in logs.values()} != {nb_parts}:
+        return f"part counts {sorted({c for _, c, _ in logs.values()})}, expected {nb_parts}"
+    if len({sig for _, _, sig in logs.values()}) != 1:
+        return f"different partition signatures {sorted({sig for _, _, sig in logs.values()})}"
+    parts = [part for part, _, _ in logs.values()]
+    if len(set(parts)) != len(parts) or max(parts) >= nb_parts:
+        return f"parts {sorted(parts)} are not distinct parts of 0..{nb_parts - 1}"
+    return None
+
+
+PARTITION_CONFIGS = [  # (arguments, number of d workers)
+    (["-c=4", "-solver=d", "-bb-order=occ,natural,random,reverse", "-bb-chunk=1"], 4),
+    (["-c=6", "-solver=cd", "-bb-order=natural,occ,random", "-bb-chunk=0,1,10"], 3),
+]
+
+
+def suite_partition(opts, report, workdir, launcher=(), extra=()):
+    """The d workers (CadiBackPartition) split the variables the same way: one signature, distinct parts."""
+    n, ratio, seed = SHARING_INSTANCES[1]
+    clauses = planted_kcnf(random.Random(seed), n, int(n * ratio), 3)
+    path = os.path.join(workdir, "partition.cnf")
+    write_cnf(path, n, clauses)
+    expected = oracle_backbone(n, clauses, workdir) if os.access(CADICAL, os.X_OK) else None
+    configs = PARTITION_CONFIGS if not launcher else [
+        (["-c=1", "-solver=cddd", "-bb-order=natural,occ,random,reverse", "-bb-chunk=1"], 3)]
+    for args, nb_d in configs:
+        run = run_backpainless(opts.binary, path, [*args, "-bb-share-cand=1", "-v=1", *extra, *SHARING_FAST],
+                               launcher=launcher)
+        error = check_run(run, *expected) if expected else None
+        error = error or check_partition(run, nb_d)
+        label = f"{'mpi ' if launcher else ''}partition {' '.join(args)}"
+        print(f"  {label}: {'OK' if error is None else 'FAIL ' + error}", flush=True)
+        report.record(label, error, run)
 
 
 def suite_robustness(opts, report, workdir):
@@ -550,6 +597,9 @@ def suite_mpi(opts, report, workdir):
         error = check_run(run, is_sat, backbone)
         print(f"  {' '.join(extra)}: {run.elapsed:.2f}s {'OK' if error is None else 'FAIL'}", flush=True)
         report.record(f"mpi -np 3 {' '.join(extra)}", error, run)
+    # 4 ranks of one worker: the 3 d workers are on 3 ranks, the parts must be split across them
+    suite_partition(opts, report, workdir, launcher=(mpirun, "--oversubscribe", "-np", "4"),
+                    extra=("-dist", "-gshr-strat=1"))
 
 
 SUITES = {"bruteforce": suite_bruteforce, "sharing": suite_sharing, "robustness": suite_robustness, "mpi": suite_mpi}
