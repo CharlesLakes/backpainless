@@ -119,6 +119,11 @@ class BackboneSolverInterface : public SharingEntity
 
 	void setShareBackboneUnits(bool value) { this->m_shareBackboneUnits = value; }
 
+	/// @brief Tells if the learnt clauses of this solver are exported (-bb-share-learnt).
+	bool getShareLearnt() const { return this->m_shareLearnt; }
+
+	void setShareLearnt(bool value) { this->m_shareLearnt = value; }
+
 	/// @brief Connects the board of decided variables (-bb-share-cand) and selects how this solver uses it.
 	void setCandidateBoard(const std::shared_ptr<CandidateBoard>& board, bool publish, bool consume)
 	{
@@ -206,6 +211,9 @@ class BackboneSolverInterface : public SharingEntity
 
 	/// @brief Export the backbone literals found as unit clauses (set per worker by -bb-share-units).
 	bool m_shareBackboneUnits = true;
+
+	/// @brief Export the learnt clauses, units included (set per worker by -bb-share-learnt).
+	bool m_shareLearnt = true;
 
 	/// @brief Board of decided variables shared by the solvers of the process, null when -bb-share-cand is off.
 	std::shared_ptr<CandidateBoard> m_candidateBoard;

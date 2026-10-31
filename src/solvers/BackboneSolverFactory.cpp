@@ -25,6 +25,7 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 {
 	/* Validated by Parameters::init */
 	const std::string& shareMask = __globalParameters__.backboneShareUnits;
+	const std::string& learntMask = __globalParameters__.backboneShareLearnt;
 	std::vector<CandidateOrder> orders;
 	parseCandidateOrderList(__globalParameters__.backboneOrder, orders);
 	std::vector<unsigned long> chunkRates;
@@ -42,6 +43,7 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 		solver->setSolverTypeId(typeIDScaler(solver));
 		/* Indexed by the global id, so that the mask also applies across MPI ranks */
 		solver->setShareBackboneUnits(shareMask[solver->getSolverId() % shareMask.size()] == '1');
+		solver->setShareLearnt(learntMask[solver->getSolverId() % learntMask.size()] == '1');
 		solver->setCandidateOrder(orders[solver->getSolverId() % orders.size()]);
 		solver->setChunkRate(chunkRates[solver->getSolverId() % chunkRates.size()]);
 		solver->setMaxSatRounds(maxSatRounds[solver->getSolverId() % maxSatRounds.size()]);

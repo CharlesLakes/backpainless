@@ -122,6 +122,12 @@ Parameters::init(int argc, char** argv)
 		exit(PERR_ARGS_ERROR);
 	}
 
+	const std::string& learntMask = __globalParameters__.backboneShareLearnt;
+	if (learntMask.empty() || learntMask.find_first_not_of("01") != std::string::npos) {
+		LOGERROR("Invalid -bb-share-learnt=%s: expected a non empty mask of 0 and 1", learntMask.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
 	const std::string& candMask = __globalParameters__.backboneShareCandidates;
 	if (candMask.empty() || candMask.find_first_not_of("01pc") != std::string::npos) {
 		LOGERROR("Invalid -bb-share-cand=%s: expected a non empty mask of 0, 1, p and c", candMask.c_str());

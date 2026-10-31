@@ -518,8 +518,8 @@ DiverseBackboneSearch::exportOnce(std::vector<int>& clause, int lbd)
 void
 DiverseBackboneSearch::exportLearntClauses()
 {
-	if (m_unitExported.empty())
-		return; /* before solve() set up the arrays */
+	if (m_unitExported.empty() || !m_shareLearnt)
+		return; /* before solve() set up the arrays, or disabled by -bb-share-learnt */
 
 	uint64_t conflicts = m_solver->get_sum_conflicts();
 	if (conflicts - m_conflictsAtLastExport < EXPORT_INTERVAL)

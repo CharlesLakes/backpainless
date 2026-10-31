@@ -298,6 +298,10 @@ BRUTEFORCE_CONFIGS = [
     ["-c=8", "-solver=ccdd", "-bb-chunk=0,10,1,0", "-bb-share-cand=1c", "-bb-share-units=10"],
     ["-c=6", "-solver=dsx", "-bb-share-cand=1", "-bb-no-flip"],
     ["-c=4", "-solver=d", "-bb-order=occ,natural,random,reverse", "-bb-chunk=0,1", "-bb-share-cand=1"],
+    # -bb-share-learnt: no learnt clause export on the workers with 0
+    ["-c=4", "-bb-share-learnt=0"],
+    ["-c=6", "-solver=cmxd", "-bb-share-learnt=10", "-bb-share-cand=1", "-bb-xor-export=1"],
+    ["-c=4", "-bb-share-learnt=0", "-bb-share-units=0", "-bb-share-cand=0"],
     # whole portfolio: colador (-bb-chunk=0), paper K = infinity, sqrt, XOR pre-phase, XOR (x) and MaxSAT (m)
     ["-c=8", "-solver=ccccsxmm", "-bb-chunk=0,1000000000,10,0,0,0,0,0", "-bb-order=natural,natural,occ,random",
      "-bb-xor-pre=00010000", "-bb-share-cand=1", "-bb-share-units=1110"],
@@ -340,6 +344,7 @@ SHARING_CONFIGS = [
     ["-c=8", "-shr-strat=1", "-bb-chunk=10", "-bb-no-flip"],
     ["-c=14", "-shr-strat=3"],
     ["-c=8", "-shr-strat=1", "-bb-share-units=0"],
+    ["-c=8", "-shr-strat=1", "-bb-share-learnt=01", "-bb-chunk=1"],
     ["-c=8", "-shr-strat=2", "-bb-share-units=10", "-bb-chunk=1"],
     ["-c=8", "-shr-strat=3", "-bb-share-units=011", "-bb-chunk=10"],
     ["-c=8", "-shr-strat=1", "-bb-share-cand=1", "-bb-chunk=1"],
@@ -394,6 +399,15 @@ def suite_sharing(opts, report, workdir):
         # a single run may end before the first round, but at least one per instance must exchange clauses
         report.record(f"{name} clauses were exchanged",
                       None if exchanged_somewhere else "no configuration shared any clause")
+        # learnt clauses and backbone units both off: the sharers must not exchange any clause
+        cfg = ["-c=8", "-shr-strat=1", "-bb-share-learnt=0", "-bb-share-units=0", "-bb-chunk=1"]
+        run = run_backpainless(opts.binary, path, cfg + SHARING_FAST)
+        error = check_run(run, is_sat, backbone)
+        shared = sum(s for _, s in run.sharing_stats()[1])
+        if error is None and shared:
+            error = f"{shared} clauses shared although no worker exports any"
+        print(f"    {' '.join(cfg):45s} shared {shared:7d}  {'OK' if error is None else 'FAIL'}", flush=True)
+        report.record(f"{name} nothing shared without learnt clauses and units", error, run)
     suite_partition(opts, report, workdir)
 
 
@@ -470,13 +484,14 @@ def suite_robustness(opts, report, workdir):
         error = "'b' lines printed with -no-backbone"
     report.record("-no-backbone", error, run)
 
-    # -bb-share-units: an invalid mask is rejected before solving
-    for mask in ("", "2", "1a"):
-        run = run_backpainless(opts.binary, demo, [f"-bb-share-units={mask}"])
-        error = None
-        if run.returncode != PERR_ARGS_ERROR or run.status is not None:
-            error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
-        report.record(f"-bb-share-units={mask!r} rejected", error, run)
+    # -bb-share-units / -bb-share-learnt: an invalid mask is rejected before solving
+    for option in ("-bb-share-units", "-bb-share-learnt"):
+        for mask in ("", "2", "1a"):
+            run = run_backpainless(opts.binary, demo, [f"{option}={mask}"])
+            error = None
+            if run.returncode != PERR_ARGS_ERROR or run.status is not None:
+                error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
+            report.record(f"{option}={mask!r} rejected", error, run)
 
     # -bb-share-cand: same validation, characters 0, 1, p and c
     for mask in ("", "2", "1x", "P"):

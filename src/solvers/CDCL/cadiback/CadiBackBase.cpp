@@ -19,6 +19,8 @@
 bool
 CadiBackBase::learning(int size, int glue)
 {
+	if (!m_shareLearnt)
+		return false;
 	if (size > 0) {
 		LOGDEBUG3("CadiBack %d will export clause of size %d, glue %d", this->getSolverId(), size, glue);
 		tempClause.reserve(size);
