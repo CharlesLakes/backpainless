@@ -30,7 +30,7 @@ class CadiBackPartition : public CadiBackSqrt
 
 	size_t blockSize(size_t n) const override;
 
-	unsigned int blockOfPosition(size_t i) const override;
+	unsigned int blockOf(size_t i, int lit) const override;
 
   private:
 	unsigned int m_partIndex = 0;

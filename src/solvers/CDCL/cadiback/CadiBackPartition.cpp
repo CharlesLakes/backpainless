@@ -44,7 +44,7 @@ CadiBackPartition::initCandidates(std::vector<int>& candidates)
 }
 
 unsigned int
-CadiBackPartition::blockOfPosition(size_t i) const
+CadiBackPartition::blockOf(size_t i, int /* lit */) const
 {
 	/* Position i of the rotated candidates comes from position (own * size + i) mod n of the initial order. Blocks
 	 * are the parts counted from the own one, so the last part (possibly shorter) keeps its bounds */
