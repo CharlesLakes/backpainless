@@ -134,6 +134,11 @@ class BackboneSolverInterface : public SharingEntity
 
 	bool getPublishCandidates() const { return this->m_publishCandidates; }
 
+	/// @brief Statuses this solver publishes on the board (set per worker by -bb-share-cand-kind).
+	void setBoardKind(BoardKind kind) { this->m_boardKind = kind; }
+
+	BoardKind getBoardKind() const { return this->m_boardKind; }
+
 	bool getConsumeCandidates() const { return this->m_consumeCandidates; }
 
 	/// @brief Order of the initial candidates (set per worker by -bb-order).
@@ -220,6 +225,15 @@ class BackboneSolverInterface : public SharingEntity
 
 	/// @brief Publish the variables decided by this solver on @ref m_candidateBoard.
 	bool m_publishCandidates = false;
+
+	/// @brief Statuses published on @ref m_candidateBoard: both, only backbone literals or only free variables.
+	BoardKind m_boardKind = BoardKind::ALL;
+
+	/// @brief True if this solver publishes the backbone literals it proves on the board.
+	bool publishesBackbone() const { return m_publishCandidates && m_boardKind != BoardKind::FREE; }
+
+	/// @brief True if this solver publishes the free variables it finds on the board.
+	bool publishesFree() const { return m_publishCandidates && m_boardKind != BoardKind::BACKBONE; }
 
 	/// @brief Drop the candidates already decided on @ref m_candidateBoard.
 	bool m_consumeCandidates = false;

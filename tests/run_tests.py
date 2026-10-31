@@ -302,6 +302,10 @@ BRUTEFORCE_CONFIGS = [
     ["-c=4", "-bb-share-learnt=0"],
     ["-c=6", "-solver=cmxd", "-bb-share-learnt=10", "-bb-share-cand=1", "-bb-xor-export=1"],
     ["-c=4", "-bb-share-learnt=0", "-bb-share-units=0", "-bb-share-cand=0"],
+    # -bb-share-cand-kind: only backbone literals or only free variables on the board
+    ["-c=4", "-bb-share-cand=1", "-bb-share-cand-kind=free", "-bb-share-units=0"],
+    ["-c=4", "-bb-share-cand=1", "-bb-share-cand-kind=backbone", "-bb-chunk=1"],
+    ["-c=6", "-solver=cxmd", "-bb-share-cand=1", "-bb-share-cand-kind=all,free,backbone"],
     # whole portfolio: colador (-bb-chunk=0), paper K = infinity, sqrt, XOR pre-phase, XOR (x) and MaxSAT (m)
     ["-c=8", "-solver=ccccsxmm", "-bb-chunk=0,1000000000,10,0,0,0,0,0", "-bb-order=natural,natural,occ,random",
      "-bb-xor-pre=00010000", "-bb-share-cand=1", "-bb-share-units=1110"],
@@ -485,6 +489,12 @@ def suite_robustness(opts, report, workdir):
     report.record("-no-backbone", error, run)
 
     # -bb-share-units / -bb-share-learnt: an invalid mask is rejected before solving
+    for kinds in ("", "none", "all,", "free,bb"):
+        run = run_backpainless(opts.binary, demo, [f"-bb-share-cand-kind={kinds}"])
+        error = None
+        if run.returncode != PERR_ARGS_ERROR or run.status is not None:
+            error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
+        report.record(f"-bb-share-cand-kind={kinds!r} rejected", error, run)
     for option in ("-bb-share-units", "-bb-share-learnt"):
         for mask in ("", "2", "1a"):
             run = run_backpainless(opts.binary, demo, [f"{option}={mask}"])
@@ -588,6 +598,20 @@ def suite_share_cand_mask(opts, report, workdir):
         print(f"  -bb-share-cand={mask:4s} consumers {sorted(consumers)}  {'OK' if error is None else 'FAIL'}",
               flush=True)
         report.record(f"-bb-share-cand={mask} honoured", error, run)
+    # -bb-share-cand-kind: what is taken from the board is only of the published kind
+    for kind, forbidden in (("free", "backbone literal"), ("backbone", "free variable")):
+        run = run_backpainless(DEBUG_BINARY, path, [f"-c={nb_solvers}", "-v=2", "-bb-share-cand=1",
+                                                   f"-bb-share-cand-kind={kind}", "-bb-chunk=1", *SHARING_FAST])
+        taken = re.findall(r"CadiBack \d+ took (free variable|backbone literal) ", run.stdout)
+        error = None
+        if run.status != "SATISFIABLE":
+            error = f"status {run.status!r}, exit {run.returncode}"
+        elif expected is not None and sorted(run.backbone, key=abs) != sorted(expected, key=abs):
+            error = "backbone differs from the oracle"
+        elif forbidden in taken:
+            error = f"a {forbidden} was taken from the board although only {kind} statuses are published"
+        print(f"  -bb-share-cand-kind={kind:8s} taken {len(taken):5d}  {'OK' if error is None else 'FAIL'}", flush=True)
+        report.record(f"-bb-share-cand-kind={kind} honoured", error, run)
 
 
 def suite_mpi(opts, report, workdir):

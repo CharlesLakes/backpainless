@@ -399,7 +399,7 @@ DiverseBackboneSearch::markFree(int lit)
 	m_notBackbone[litIndex(var)] = 1;
 	m_notBackbone[litIndex(-(int)var)] = 1;
 	m_freeVariables++;
-	if (m_publishCandidates && m_candidateBoard->publishFree(var))
+	if (publishesFree() && m_candidateBoard->publishFree(var))
 		m_publishedFree++;
 }
 
@@ -467,7 +467,7 @@ DiverseBackboneSearch::addBackboneLiteral(int lit)
 {
 	m_backbone.push_back(lit);
 
-	if (m_publishCandidates && m_candidateBoard->publishBackbone(lit))
+	if (publishesBackbone() && m_candidateBoard->publishBackbone(lit))
 		m_publishedBackbone++;
 
 	/* Marked even when the mask disables the export, so that exportLearntClauses does not export it either */

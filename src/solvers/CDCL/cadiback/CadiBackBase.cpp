@@ -322,7 +322,7 @@ CadiBackBase::addBackboneLiteral(int lit)
 {
 	m_backbone.push_back(lit);
 
-	if (m_publishCandidates && m_candidateBoard->publishBackbone(lit))
+	if (publishesBackbone() && m_candidateBoard->publishBackbone(lit))
 		m_publishedBackbone++;
 
 	if (!m_shareBackboneUnits)
@@ -340,7 +340,7 @@ CadiBackBase::addBackboneLiteral(int lit)
 void
 CadiBackBase::addFreeVariable(int lit)
 {
-	if (m_publishCandidates && m_candidateBoard->publishFree(lit))
+	if (publishesFree() && m_candidateBoard->publishFree(lit))
 		m_publishedFree++;
 }
 

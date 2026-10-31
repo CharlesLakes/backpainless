@@ -1,6 +1,7 @@
 #include "Parameters.hpp"
 #include "ErrorCodes.hpp"
 #include "Logger.hpp"
+#include "containers/CandidateBoard.hpp"
 #include "solvers/CandidateOrder.hpp"
 #include "solvers/XorOptions.hpp"
 #include <algorithm>
@@ -131,6 +132,13 @@ Parameters::init(int argc, char** argv)
 	const std::string& candMask = __globalParameters__.backboneShareCandidates;
 	if (candMask.empty() || candMask.find_first_not_of("01pc") != std::string::npos) {
 		LOGERROR("Invalid -bb-share-cand=%s: expected a non empty mask of 0, 1, p and c", candMask.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
+	std::vector<BoardKind> boardKinds;
+	if (!parseBoardKindList(__globalParameters__.backboneShareCandidatesKind, boardKinds)) {
+		LOGERROR("Invalid -bb-share-cand-kind=%s: expected a comma-separated list of all, backbone, free",
+				 __globalParameters__.backboneShareCandidatesKind.c_str());
 		exit(PERR_ARGS_ERROR);
 	}
 

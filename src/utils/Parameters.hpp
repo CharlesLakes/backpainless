@@ -48,6 +48,11 @@
 		  "0",                                                                                                               \
 		  "Mask cycled over the solver ids for the board of decided variables: 0 off, 1 publish and consume, p publish, "    \
 		  "c consume")                                                                                                       \
+	PARAM(backboneShareCandidatesKind,                                                                                    \
+		  std::string,                                                                                                       \
+		  "bb-share-cand-kind",                                                                                              \
+		  "all",                                                                                                             \
+		  "Statuses published on the board, comma-separated list cycled over the solver ids: all, backbone, free")           \
 	PARAM(backboneShareCandidatesLocal,                                                                                   \
 		  bool,                                                                                                              \
 		  "bb-share-cand-local",                                                                                             \
@@ -232,6 +237,9 @@ extern Parameters __globalParameters__;
 		 "    The mask is cycled over the solver ids, e.g. " YELLOW "-bb-share-cand=1c" RESET                            \
 		 ": even ids publish and consume, odd ids only consume\n"                                                     \
 		 "    With " YELLOW "-dist" RESET ", the board is exchanged across MPI ranks by the global sharing strategy\n"     \
+		 "  " YELLOW "-bb-share-cand-kind" RESET ": What each worker publishes on the board (comma-separated)\n"       \
+		 "    " BOLD "all" RESET " (default), " BOLD "backbone" RESET " (backbone literals only) or " BOLD "free" RESET   \
+		 " (free variables only)\n"                                                                                   \
 		 "  " YELLOW "-bb-share-cand-local" RESET ": With -dist, keep the board inside each process\n"                   \
 		 "  " YELLOW "-bb-order" RESET ": Order of the initial candidates, one name per worker (comma-separated)\n"     \
 		 "    " BOLD "natural" RESET ": variable index (default)   " BOLD "reverse" RESET ": decreasing index\n"       \
