@@ -489,6 +489,13 @@ def suite_robustness(opts, report, workdir):
     report.record("-no-backbone", error, run)
 
     # -bb-share-units / -bb-share-learnt: an invalid mask is rejected before solving
+    # -solver: an unknown worker type is rejected before solving (it used to hang the process)
+    for portfolio in ("", "q", "cq", "cmxp"):
+        run = run_backpainless(opts.binary, demo, ["-c=2", f"-solver={portfolio}"], timeout=30)
+        error = None
+        if run.returncode != PERR_ARGS_ERROR or run.status is not None:
+            error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
+        report.record(f"-solver={portfolio!r} rejected", error, run)
     for kinds in ("", "none", "all,", "free,bb"):
         run = run_backpainless(opts.binary, demo, [f"-bb-share-cand-kind={kinds}"])
         error = None

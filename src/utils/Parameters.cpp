@@ -2,6 +2,7 @@
 #include "ErrorCodes.hpp"
 #include "Logger.hpp"
 #include "containers/CandidateBoard.hpp"
+#include "solvers/BackboneSolverFactory.hpp"
 #include "solvers/CandidateOrder.hpp"
 #include "solvers/XorOptions.hpp"
 #include <algorithm>
@@ -114,6 +115,16 @@ Parameters::init(int argc, char** argv)
 	if (__globalParameters__.filename.empty()) {
 		LOGERROR("Error: no input file found");
 		// printHelp();
+		exit(PERR_ARGS_ERROR);
+	}
+
+	/* An unknown character would only be found by BackboneSolverFactory::createSolver, in the portfolio thread, where
+	 * exit() leaves the process hanging */
+	const std::string& portfolio = __globalParameters__.solver;
+	if (portfolio.empty() || portfolio.find_first_not_of(BackboneSolverFactory::SOLVER_TYPES) != std::string::npos) {
+		LOGERROR("Invalid -solver=%s: expected a non empty string of %s",
+				 portfolio.c_str(),
+				 BackboneSolverFactory::SOLVER_TYPES);
 		exit(PERR_ARGS_ERROR);
 	}
 
