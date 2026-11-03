@@ -26,6 +26,7 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 	/* Validated by Parameters::init */
 	const std::string& shareMask = __globalParameters__.backboneShareUnits;
 	const std::string& learntMask = __globalParameters__.backboneShareLearnt;
+	const std::string& modelMask = __globalParameters__.initialModelUse;
 	std::vector<BoardKind> boardKinds;
 	parseBoardKindList(__globalParameters__.backboneShareCandidatesKind, boardKinds);
 	std::vector<CandidateOrder> orders;
@@ -46,6 +47,7 @@ BackboneSolverFactory::diversification(const std::vector<std::shared_ptr<Backbon
 		/* Indexed by the global id, so that the mask also applies across MPI ranks */
 		solver->setShareBackboneUnits(shareMask[solver->getSolverId() % shareMask.size()] == '1');
 		solver->setShareLearnt(learntMask[solver->getSolverId() % learntMask.size()] == '1');
+		solver->setUseInitialModel(modelMask[solver->getSolverId() % modelMask.size()] == '1');
 		solver->setBoardKind(boardKinds[solver->getSolverId() % boardKinds.size()]);
 		solver->setCandidateOrder(orders[solver->getSolverId() % orders.size()]);
 		solver->setChunkRate(chunkRates[solver->getSolverId() % chunkRates.size()]);

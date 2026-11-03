@@ -141,6 +141,14 @@ class BackboneSolverInterface : public SharingEntity
 
 	bool getConsumeCandidates() const { return this->m_consumeCandidates; }
 
+	/// @brief Model of the formula given by -model (shared by the workers), the first SAT call assumes it.
+	void setInitialModel(const std::shared_ptr<const std::vector<int>>& model) { this->m_initialModel = model; }
+
+	/// @brief Tells if this solver starts from the -model assignment (set per worker by -model-use).
+	bool getUseInitialModel() const { return this->m_useInitialModel; }
+
+	void setUseInitialModel(bool value) { this->m_useInitialModel = value; }
+
 	/// @brief Order of the initial candidates (set per worker by -bb-order).
 	CandidateOrder getCandidateOrder() const { return this->m_candidateOrder; }
 
@@ -237,6 +245,18 @@ class BackboneSolverInterface : public SharingEntity
 
 	/// @brief Drop the candidates already decided on @ref m_candidateBoard.
 	bool m_consumeCandidates = false;
+
+	/// @brief Assignment of -model, null or empty when none was given.
+	std::shared_ptr<const std::vector<int>> m_initialModel;
+
+	/// @brief Assume @ref m_initialModel in the first SAT call (-model-use).
+	bool m_useInitialModel = true;
+
+	/// @brief Literals to assume in the first SAT call, null when this solver searches its first model.
+	const std::vector<int>* initialModel() const
+	{
+		return (m_useInitialModel && m_initialModel && !m_initialModel->empty()) ? m_initialModel.get() : nullptr;
+	}
 
 	/// @brief Order of the initial candidates (-bb-order).
 	CandidateOrder m_candidateOrder = CandidateOrder::NATURAL;

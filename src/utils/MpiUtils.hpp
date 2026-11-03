@@ -51,6 +51,12 @@ sendFormula(std::vector<simpleClause>& clauses, unsigned int* varCount, int root
 bool
 sendFormula(simpleClause& clauses, unsigned int *clsCount, unsigned int* varCount, int rootRank);
 
+/// @brief Broadcasts a list of literals (the -model assignment) from @p rootRank.
+/// @param lits The literals, read on @p rootRank and overwritten on the others.
+/// @param rootRank The mpi process rank broadcasting the literals.
+void
+sendLiterals(std::vector<int>& lits, int rootRank);
+
 /// @brief Serializes a vector of Clauses into a vector of integers.
 /// @param clauses The vector of Clauses to be serialized.
 /// @param serializedClauses The vector where the serialized clauses will be stored.

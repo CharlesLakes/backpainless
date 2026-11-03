@@ -86,6 +86,39 @@ DiverseBackboneSearch::solveWith(const std::vector<CMSat::Lit>& assumptions, uns
 	return result;
 }
 
+int
+DiverseBackboneSearch::solveFirstModel()
+{
+	const double start = seconds();
+	const std::vector<int>* model = initialModel();
+	int res = 0;
+	if (model) {
+		std::vector<CMSat::Lit> assumptions;
+		assumptions.reserve(model->size());
+		for (int lit : *model)
+			assumptions.push_back(CMSat::Lit(std::abs(lit) - 1, lit < 0));
+		res = solveWith(assumptions, 0);
+		if (res == 10) {
+			m_firstModelGiven = true;
+		} else if (res == 20 && !m_solver->get_conflict().empty()) {
+			LOGWARN("DiverseBackboneSearch %d: the -model assignment falsifies the formula (%.2f s), searching a model",
+					this->getSolverId(),
+					seconds() - start);
+			res = solveWith({}, 0);
+		} /* an empty conflict: the formula is unsatisfiable */
+	} else {
+		res = solveWith({}, 0);
+	}
+
+	m_firstModelSeconds = seconds() - start;
+	if (res == 10)
+		LOG1("DiverseBackboneSearch %d: first model %s in %.2f s",
+			 this->getSolverId(),
+			 m_firstModelGiven ? "from -model" : "found",
+			 m_firstModelSeconds);
+	return res;
+}
+
 BackboneResult
 DiverseBackboneSearch::solve(const std::vector<int>& cube)
 {
@@ -103,8 +136,8 @@ DiverseBackboneSearch::solve(const std::vector<int>& cube)
 	m_fixed.assign(m_nbVars + 1, 0);
 	m_unitExported.assign(m_nbVars + 1, 0);
 
-	/* (res, sigma) <- SAT(phi) */
-	int res = solveWith({}, 0);
+	/* (res, sigma) <- SAT(phi), or the model of -model */
+	int res = solveFirstModel();
 	if (res == 20) {
 		LOGSTAT("DiverseBackboneSearch %d: formula is UNSATISFIABLE", this->getSolverId());
 		return BackboneResult::UNSAT;
@@ -746,6 +779,7 @@ DiverseBackboneSearch::printWinningLog()
 			m_freeByXor,
 			m_fixedFound,
 			m_backbone.size());
+	LOGSTAT("First model %s in %.2f s", m_firstModelGiven ? "from -model" : "found", m_firstModelSeconds);
 	if (m_consumeCandidates)
 		LOGSTAT("From the candidate board: %lu free variables dropped, %lu backbone literals taken",
 				m_boardFree,
