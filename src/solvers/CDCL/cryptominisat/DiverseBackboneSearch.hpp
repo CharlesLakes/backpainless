@@ -98,6 +98,9 @@ class DiverseBackboneSearch : public BackboneSolverInterface
 	/// pending clauses before and exports the learnt ones after. Returns 10 (SAT), 20 (UNSAT) or 0 (unknown).
 	int solveWith(const std::vector<CMSat::Lit>& assumptions, unsigned long conflicts);
 
+	/// @brief First SAT call, under the -model assignment when this worker uses it (see CadiBackBase::solveFirstModel).
+	int solveFirstModel();
+
 	/// @brief Records the current model: marks the negations of its literals as not backbone, drops the candidates
 	/// that became free (falsified, or flippable unless -bb-no-flip) and publishes them on the candidate board.
 	void filterWithModel(std::vector<int>& candidates);
@@ -194,6 +197,8 @@ class DiverseBackboneSearch : public BackboneSolverInterface
 	/* Statistics */
 	unsigned long m_satCalls = 0;
 	unsigned long m_satAnswers = 0;
+	double m_firstModelSeconds = 0; ///< duration of the first SAT call
+	bool m_firstModelGiven = false; ///< the first model is the -model assignment
 	unsigned long m_unsatAnswers = 0;
 	unsigned long m_fixedFound = 0;
 	unsigned long m_xorRounds = 0;

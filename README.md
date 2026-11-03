@@ -118,6 +118,15 @@ Output follows the CadiBack format:
 Backbone options:
 - `-bb-chunk=<K>`: `0` (default) constrains all remaining candidates at once, `1` checks them one by one, `K > 1` grows the chunk geometrically (`10` is cadiback's `--chunking`).
 - `-bb-no-flip`: do not drop flippable literals from the candidates.
+- `-model=<file>`: a model of the formula, e.g. the output of a SAT solver (`v` lines; a partial assignment is
+  completed by the search). The first SAT call of each worker assumes it instead of searching a model, which saves
+  that call on formulas that are hard to satisfy. The model is checked: if it falsifies the formula, the worker
+  reports it and searches its own. `-model-use=<mask>` (default `1`) selects the workers that start from it, e.g.
+  `10` keeps the odd ids searching their own first model (more diverse candidate lists).
+  ```bash
+  cadical -q formula.cnf > formula.model          # or kissat, or a model kept from an earlier run
+  ./backpainless formula.cnf -c=8 -model=formula.model
+  ```
 
 ### Checking results
 For small formulas (up to 22 variables), `scripts/check_backbone.py` enumerates all models and compares the result with the BackPainLess output:

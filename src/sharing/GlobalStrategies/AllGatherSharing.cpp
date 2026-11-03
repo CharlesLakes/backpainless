@@ -73,10 +73,14 @@ AllGatherSharing::doSharing()
 		TESTRUNMPI(MPI_Comm_size(yes_comm, &yes_comm_size));
 
 		if (yes_comm_size < 2) {
-			return true; // can break and end the global sharer thread since it is doing nothing
-		} else {
-			LOG3("[Allgather] %d global sharers will share their clauses", yes_comm_size);
+			/* Nobody to share with this round, but the end is not known yet: leaving the thread here (the old 'return
+			 * true') made this rank skip the next rounds, so the other ranks blocked in their next collective (the end
+			 * broadcast, the candidate board) and the run never ended. Keep going until the end is broadcast */
+			LOG2("[Allgather] no other global sharer willing to share this round (%d)", mpi_rank);
+			TESTRUNMPI(MPI_Comm_free(&yes_comm));
+			return false;
 		}
+		LOG3("[Allgather] %d global sharers will share their clauses", yes_comm_size);
 
 		// get clauses to send and serialize
 		clausesToSendSerialized.clear();
@@ -96,6 +100,7 @@ AllGatherSharing::doSharing()
 
 		// Now I have a vector of the all gathered buffers
 		deserializeClauses(receivedClauses, yes_comm_size);
+		TESTRUNMPI(MPI_Comm_free(&yes_comm)); /* a new one is split at every round */
 	}
 
 	LOG2("[Allgather] received cls %u shared cls %d", this->gstats.receivedClauses.load(), this->gstats.sharedClauses);

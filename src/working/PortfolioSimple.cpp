@@ -60,6 +60,15 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 		receivedFinalResultBcast = static_cast<int>(finalResult.load());
 	}
 
+	/* -model: read by rank 0 once the number of variables is known. Not fatal (exit() here, outside the main thread,
+	 * would leave the process hanging): an unreadable model is ignored and every worker searches its first model */
+	auto initialModel = std::make_shared<std::vector<int>>();
+	if (mpi_rank <= 0 && !__globalParameters__.initialModel.empty() &&
+		!Parsers::parseModel(__globalParameters__.initialModel.c_str(), varCount, *initialModel)) {
+		LOGERROR("The model %s is ignored, every worker searches its first model", __globalParameters__.initialModel.c_str());
+		initialModel->clear();
+	}
+
 	// Send instance via MPI from leader 0 to workers.
 	if (dist) {
 		TESTRUNMPI(MPI_Bcast(&receivedFinalResultBcast, 1, MPI_INT, 0, MPI_COMM_WORLD));
@@ -74,7 +83,12 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 			mutexGlobalEnd.unlock();
 			return;
 		} else // send formula if not solved while parsing
+		{
 			mpiutils::sendFormula(initClauses, &varCount, 0);
+			/* Same parameters on every rank, so the collective stays matched */
+			if (!__globalParameters__.initialModel.empty())
+				mpiutils::sendLiterals(*initialModel, 0);
+		}
 	}
 
 	unsigned int clausesCount = initClauses.size();
@@ -108,6 +122,9 @@ PortfolioSimple::solve(const std::vector<int>& cube)
 	}
 	BackboneSolverFactory::diversification(solvers, globalIDScaler, typeIDScaler);
 	std::shared_ptr<CandidateBoard> board = BackboneSolverFactory::connectCandidateBoard(solvers, varCount);
+	if (!initialModel->empty())
+		for (auto& solver : solvers)
+			solver->setInitialModel(initialModel);
 
 	LOG0("Diversified all solvers");
 

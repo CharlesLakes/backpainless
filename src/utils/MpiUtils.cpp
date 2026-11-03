@@ -231,6 +231,17 @@ sendFormula(std::vector<simpleClause>& clauses, unsigned int* varCount, int root
 }
 
 void
+sendLiterals(std::vector<int>& lits, int rootRank)
+{
+	int64_t size = (mpi_rank == rootRank) ? static_cast<int64_t>(lits.size()) : 0;
+	TESTRUNMPI(MPI_Bcast(&size, 1, MPI_INT64_T, rootRank, MPI_COMM_WORLD));
+	if (mpi_rank != rootRank)
+		lits.resize(size);
+	if (size > 0)
+		TESTRUNMPI(MPI_Bcast(lits.data(), (int)size, MPI_INT, rootRank, MPI_COMM_WORLD));
+}
+
+void
 sendBackboneToRoot()
 {
 	if (mpi_winner == 0 || finalResult != BackboneResult::COMPLETE)

@@ -8,7 +8,7 @@ Suites:
                 that clauses are really exchanged (Sharer stats) and that the backbone matches an independent oracle
                 (the standalone CaDiCaL binary, one SAT call per candidate literal)
     robustness  output format, -no-backbone, timeout, repeated runs with many threads (interrupt races),
-                -bb-share-units / -bb-share-cand validation and, with the debug binary, which workers export
+                -bb-share-units / -bb-share-cand / -model validation and, with the debug binary, which workers export
                 backbone units and which ones consume the candidate board
     mpi         distributed runs with mpirun (not part of 'all', needs -dist support on the machine)
 
@@ -312,6 +312,42 @@ BRUTEFORCE_CONFIGS = [
 ]
 
 
+def first_model(nb_vars, clauses):
+    """First model in the order of the assignments (bit v-1 = variable v true), None when unsatisfiable."""
+    for bits in range(1 << nb_vars):
+        value = lambda lit: (bits >> (abs(lit) - 1)) & 1 == (lit > 0)
+        if all(any(value(lit) for lit in cls) for cls in clauses):
+            return [v if (bits >> (v - 1)) & 1 else -v for v in range(1, nb_vars + 1)]
+    return None
+
+
+# -model files: the full model, its first half (completed by the search) and its negation (usually not a model: the
+# workers must notice it and search their own); {full}, {half} and {neg} are replaced by the files of each formula
+MODEL_CONFIGS = [
+    ["-c=1", "-model={full}"],
+    ["-c=1", "-model={half}", "-bb-chunk=1"],
+    ["-c=1", "-model={neg}", "-bb-no-flip"],
+    ["-c=1", "-solver=x", "-model={full}"],
+    ["-c=1", "-solver=x", "-model={neg}"],
+    ["-c=5", "-solver=cxsdm", "-model={full}", "-bb-share-cand=1"],
+    ["-c=4", "-solver=cx", "-model={half}", "-model-use=10", "-bb-chunk=0,10"],
+    ["-c=3", "-solver=cxm", "-model={neg}", "-bb-share-cand=1"],
+    ["-c=2", "-model={full}", "-bb-xor-pre=1"],
+]
+
+
+def write_model_files(path, model):
+    """The {full}, {half} and {neg} files of MODEL_CONFIGS for @p model ('v' lines, plain literals for the half)."""
+    files = {"full": f"{path}.model", "half": f"{path}.half.model", "neg": f"{path}.neg.model"}
+    with open(files["full"], "w") as f:
+        f.write("c from run_tests.py\ns SATISFIABLE\nv " + " ".join(map(str, model)) + " 0\n")
+    with open(files["half"], "w") as f:
+        f.write(" ".join(map(str, model[: (len(model) + 1) // 2])) + "\n")
+    with open(files["neg"], "w") as f:
+        f.write("v " + " ".join(str(-lit) for lit in model) + "\nv 0\n")
+    return files
+
+
 def suite_bruteforce(opts, report, workdir):
     rng = random.Random(opts.seed)
     formulas = handwritten_formulas() + random_small_formulas(rng, 25 if opts.quick else 120)
@@ -322,9 +358,18 @@ def suite_bruteforce(opts, report, workdir):
         is_sat, backbone = brute_force_backbone(n, [c for c in clauses])
         for cfg in BRUTEFORCE_CONFIGS:
             jobs.append((f"{name} {' '.join(cfg)}", path, cfg, is_sat, backbone))
+        model = first_model(n, clauses) if is_sat else None
+        if model:
+            files = write_model_files(path, model)
+            for cfg in MODEL_CONFIGS:
+                cfg = [arg.format(**files) for arg in cfg]
+                label = " ".join(re.sub(r"=.*\.(half|neg)?\.?model$", lambda m: f"={m.group(1) or 'full'}", a)
+                                 for a in cfg)
+                jobs.append((f"{name} {label}", path, cfg, is_sat, backbone))
 
     nb_sat = sum(1 for _, n, c in formulas if brute_force_backbone(n, c)[0])
-    print(f"[bruteforce] {len(formulas)} formulas ({nb_sat} SAT), {len(BRUTEFORCE_CONFIGS)} configurations, "
+    print(f"[bruteforce] {len(formulas)} formulas ({nb_sat} SAT), {len(BRUTEFORCE_CONFIGS)} configurations "
+          f"(+{len(MODEL_CONFIGS)} with -model on the SAT ones), "
           f"{len(jobs)} runs", flush=True)
 
     def work(job):
@@ -510,6 +555,40 @@ def suite_robustness(opts, report, workdir):
                 error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
             report.record(f"{option}={mask!r} rejected", error, run)
 
+    # -model-use: same validation; -model: a missing file is rejected, an unreadable one is ignored (exit() from the
+    # portfolio thread would hang), the answer stays right
+    for mask in ("", "2", "1a"):
+        run = run_backpainless(opts.binary, demo, ["-model=" + demo, f"-model-use={mask}"], timeout=30)
+        error = None
+        if run.returncode != PERR_ARGS_ERROR or run.status is not None:
+            error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
+        report.record(f"-model-use={mask!r} rejected", error, run)
+    run = run_backpainless(opts.binary, demo, ["-model=" + os.path.join(workdir, "missing.model")], timeout=30)
+    error = None
+    if run.returncode != PERR_ARGS_ERROR or run.status is not None:
+        error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
+    report.record("missing -model file rejected", error, run)
+    # a valid model is really used, by the workers selected by -model-use only (-v=1 logs the first model)
+    model_files = write_model_files(os.path.join(workdir, "demo"), first_model(nb_vars, demo_clauses))
+    run = run_backpainless(opts.binary, demo, ["-c=4", "-solver=cxdm", "-v=1", "-model-use=1101",
+                                               "-model=" + model_files["full"]], timeout=30)
+    error = check_run(run, demo_sat, demo_bb)
+    origins = dict(re.findall(r"\w+ (\d+): first model (from -model|found) in", run.stdout))
+    expected_origins = {"0": "from -model", "1": "from -model", "2": "found", "3": "from -model"}
+    if error is None and any(origins.get(w, o) != o for w, o in expected_origins.items()):
+        error = f"first model origins {origins}, expected {expected_origins}"
+    report.record("-model used by the workers of -model-use", error, run)
+    for name, content in (("out-of-range", "v 1 999 0\n"), ("both-signs", "v 3 -3 0\n"), ("garbage", "v 1 x 0\n"),
+                          ("unsat", "s UNSATISFIABLE\n")):
+        bad = os.path.join(workdir, f"{name}.model")
+        with open(bad, "w") as f:
+            f.write(content)
+        run = run_backpainless(opts.binary, demo, ["-c=2", "-solver=cx", "-v=1", "-model=" + bad], timeout=30)
+        error = check_run(run, demo_sat, demo_bb)
+        if error is None and "is ignored" not in run.stdout:
+            error = "the unreadable model was not reported as ignored"
+        report.record(f"-model {name} ignored", error, run)
+
     # -bb-share-cand: same validation, characters 0, 1, p and c
     for mask in ("", "2", "1x", "P"):
         run = run_backpainless(opts.binary, demo, [f"-bb-share-cand={mask}"])
@@ -632,12 +711,17 @@ def suite_mpi(opts, report, workdir):
     path = os.path.join(workdir, "mpi.cnf")
     write_cnf(path, n, clauses)
     is_sat, backbone = oracle_backbone(n, clauses, workdir)
+    # -model is read by rank 0 and broadcast with the formula
+    found = cadical_solve(n, clauses, [], workdir)
+    model = write_model_files(path, [found.get(v, v) for v in range(1, n + 1)])
     # the candidate board is exchanged across ranks unless -bb-share-cand-local; -c=1: one worker per rank, the
     # board only reaches the other workers through MPI
     for extra in (["-gshr-strat=1"], ["-gshr-strat=2"], ["-gshr-strat=3"], ["-gshr-strat=1", "-bb-share-units=10"],
                   ["-gshr-strat=1", "-bb-share-cand=1"], ["-gshr-strat=2", "-bb-share-cand=1c"],
                   ["-gshr-strat=3", "-bb-share-cand=1", "-c=1", "-solver=csm"],
-                  ["-gshr-strat=1", "-bb-share-cand=1", "-bb-share-cand-local"]):
+                  ["-gshr-strat=1", "-bb-share-cand=1", "-bb-share-cand-local"],
+                  ["-gshr-strat=1", "-bb-share-cand=1", "-solver=cxd", "-model=" + model["full"]],
+                  ["-gshr-strat=1", "-model=" + model["neg"], "-model-use=10"]):
         run = run_backpainless(opts.binary, path, ["-c=2", "-dist", *extra, *SHARING_FAST],
                                launcher=(mpirun, "--oversubscribe", "-np", "3"))
         error = check_run(run, is_sat, backbone)

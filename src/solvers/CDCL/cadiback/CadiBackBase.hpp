@@ -198,6 +198,11 @@ class CadiBackBase
 	/// @brief Solve under the clause 'constraint' (empty: no constraint). Maps CaDiCaL answers to 10/20/0.
 	int solveUnderConstraint(const std::vector<int>& constraint);
 
+	/// @brief First SAT call: under the -model assignment as assumptions when this worker uses it (only propagation
+	/// for a full model, and the model is checked), else a plain call. A model that falsifies the formula is reported
+	/// and the plain call follows. Maps CaDiCaL answers to 10/20/0.
+	int solveFirstModel();
+
 	/// @brief Adds a proven backbone literal to @ref m_backbone, exports it as a unit clause to the sharing clients
 	/// (only if enabled for this worker by -bb-share-units) and publishes it on the candidate board (-bb-share-cand).
 	void addBackboneLiteral(int lit);
@@ -225,6 +230,8 @@ class CadiBackBase
 	unsigned long m_boardBackbone = 0; ///< backbone literals taken from the board
 	unsigned long m_publishedFree = 0;	   ///< free variables this solver was the first to publish on the board
 	unsigned long m_publishedBackbone = 0; ///< backbone literals this solver was the first to publish on the board
+	double m_firstModelSeconds = 0;		   ///< duration of the first SAT call
+	bool m_firstModelGiven = false;		   ///< the first model is the -model assignment
 
 	/*----------------------Learner------------------------*/
 	/// @details The Learner methods are called by CaDiCaL from the solving thread only

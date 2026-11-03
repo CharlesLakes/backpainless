@@ -124,6 +124,50 @@ CadiBackBase::solveUnderConstraint(const std::vector<int>& constraint)
 	return solver->solve();
 }
 
+int
+CadiBackBase::solveFirstModel()
+{
+	const auto start = std::chrono::steady_clock::now();
+	auto elapsed = [&start]() {
+		return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+	};
+
+	const std::vector<int>* model = initialModel();
+	int res = 0;
+	if (model) {
+		/* A full model makes the call pure propagation; a partial one is completed by the search. The assumptions
+		 * only guide this call: the model found is a model of the formula, so the candidates and flippable are as
+		 * after a plain call, and CaDiCaL saves its phases */
+		for (int lit : *model)
+			solver->assume(lit);
+		m_satCalls++;
+		res = solver->solve();
+		if (res == 10) {
+			m_firstModelGiven = true;
+		} else if (res == 20) {
+			bool failed = std::any_of(model->begin(), model->end(), [this](int lit) { return solver->failed(lit); });
+			if (failed) {
+				LOGWARN("%s %d: the -model assignment falsifies the formula (%.2f s), searching a model",
+						variantName(),
+						this->getSolverId(),
+						elapsed());
+				res = solveUnderConstraint({});
+			} /* else no assumption is involved: the formula is unsatisfiable */
+		}
+	} else {
+		res = solveUnderConstraint({});
+	}
+
+	m_firstModelSeconds = elapsed();
+	if (res == 10)
+		LOG1("%s %d: first model %s in %.2f s",
+			 variantName(),
+			 this->getSolverId(),
+			 m_firstModelGiven ? "from -model" : "found",
+			 m_firstModelSeconds);
+	return res;
+}
+
 BackboneResult
 CadiBackBase::solve(const std::vector<int>& cube)
 {
@@ -137,8 +181,8 @@ CadiBackBase::solve(const std::vector<int>& cube)
 
 	m_backbone.clear();
 
-	/* (res, sigma) <- SAT(phi) */
-	int res = solveUnderConstraint({});
+	/* (res, sigma) <- SAT(phi), or the model of -model */
+	int res = solveFirstModel();
 
 	if (res == 20) {
 		LOGSTAT("%s %d: formula is UNSATISFIABLE", variantName(), this->getSolverId());
@@ -707,6 +751,7 @@ CadiBackBase::printWinningLog()
 			m_unsatAnswers,
 			m_fixedFound,
 			m_backbone.size());
+	LOGSTAT("First model %s in %.2f s", m_firstModelGiven ? "from -model" : "found", m_firstModelSeconds);
 	if (m_consumeCandidates)
 		LOGSTAT("From the candidate board: %lu free variables dropped, %lu backbone literals taken",
 				m_boardFree,

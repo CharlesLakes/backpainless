@@ -10,6 +10,11 @@
 #include "NumericConstants.hpp"
 #include "Parameters.hpp"
 #include "painless.hpp"
+#include <cctype>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
+#include <string>
 #include <unordered_set>
 
 namespace Parsers {
@@ -333,6 +338,78 @@ parseCNF(const char* filename,
 		 parsedVarCount,
 		 filename);
 
+	return true;
+}
+
+bool
+parseModel(const char* filename, unsigned int varCount, std::vector<int>& model)
+{
+	std::ifstream in(filename);
+	if (!in) {
+		LOGERROR("Couldn't open model file: %s", filename);
+		return false;
+	}
+
+	std::vector<int> value(varCount + 1, 0);
+	std::string line;
+	unsigned long lineNumber = 0;
+	bool sawV = false, sawPlain = false;
+	while (std::getline(in, line)) {
+		lineNumber++;
+		size_t start = line.find_first_not_of(" \t\r");
+		if (start == std::string::npos)
+			continue;
+		char first = line[start];
+		if (first == 'c')
+			continue;
+		if (first == 's') {
+			if (line.find("UNSAT") != std::string::npos) {
+				LOGERROR("Model file %s: the formula is reported unsatisfiable (line %lu)", filename, lineNumber);
+				return false;
+			}
+			continue;
+		}
+		std::istringstream fields(line.substr(start));
+		if (first == 'v') {
+			fields.get();
+			sawV = true;
+		} else if (first == '-' || std::isdigit((unsigned char)first)) {
+			sawPlain = true;
+		} else {
+			LOGERROR("Model file %s: unexpected line %lu: %s", filename, lineNumber, line.c_str());
+			return false;
+		}
+		long lit;
+		while (fields >> lit) {
+			if (lit == 0)
+				continue;
+			unsigned long var = std::labs(lit);
+			if (var > varCount) {
+				LOGERROR("Model file %s: literal %ld out of the %u variables (line %lu)", filename, lit, varCount, lineNumber);
+				return false;
+			}
+			int sign = (lit > 0) ? 1 : -1;
+			if (value[var] == -sign) {
+				LOGERROR("Model file %s: variable %lu assigned both ways (line %lu)", filename, var, lineNumber);
+				return false;
+			}
+			value[var] = sign;
+		}
+		if (!fields.eof()) {
+			LOGERROR("Model file %s: unexpected token on line %lu: %s", filename, lineNumber, line.c_str());
+			return false;
+		}
+	}
+	if (sawV && sawPlain) {
+		LOGERROR("Model file %s: mixes 'v' lines and plain literal lines", filename);
+		return false;
+	}
+
+	model.clear();
+	for (unsigned int var = 1; var <= varCount; var++)
+		if (value[var])
+			model.push_back(value[var] * (int)var);
+	LOG0("Parsed a model of %zu out of %u variables in %s", model.size(), varCount, filename);
 	return true;
 }
 
