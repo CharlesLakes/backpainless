@@ -148,7 +148,7 @@ types, one letter per type, and the number is the total number of workers. The l
 | `m` | MaxSatBackbone on CaDiCaL (`-solver=m`) | rounds of EvalMaxSAT, then the CadiBack loop |
 | `x` | DiverseBackboneSearch on CryptoMiniSat (`-solver=x`) | XOR exploration, then the CadiBack loop on CryptoMiniSat |
 | `p` | CadiBack on CaDiCaL with `-bb-xor-pre` | XOR exploration on CaDiCaL, then the CadiBack loop on the same solver |
-| `d` | CadiBackPartition on CaDiCaL (`-solver=d`) | the variables split into one block per `d` worker, the same blocks on every worker; the k-th starts with block k |
+| `d` | CadiBackPartition on CaDiCaL (`-solver=d`) | the variables split into one part per `d` worker, the same parts on every worker, cut into blocks; `D_MODE=steal` (default): a worker only checks the blocks it claims (own part from the front, then stolen from the end of the others), the rest comes from the board; `D_MODE=walk`: the k-th checks part k, then k+1, ... |
 | `s` | CadiBackSqrt on CaDiCaL (`-solver=s`) | the CadiBack loop block by block, sqrt(#candidates) blocks |
 
 | Experiment | 8 workers | 16 workers | 24 workers |
@@ -304,7 +304,7 @@ mxp, mx, cmp) on the `main` list, by phases in order of priority, all in `runs/e
 | Phase | Question | Configurations |
 |---|---|---|
 | 1 | the 6 best | the 6 mixes, 16 workers |
-| 2 | partition | `d`, `s`, `c`, `cd`, 16 workers (and `cmxpd` vs `cmxp` of phase 1) |
+| 2 | partition | `d`, `s`, `c`, `cd`, 16 workers (and `cmxpd` vs `cmxp` of phase 1), `d` and `cd` with `D_MODE=walk` |
 | 3 | sharing | `cmxpd-16` with `SHARE` = `no-clauses`, `no-backbones`, `no-free`, `none` |
 | 4 | diversity | `m`, `x`, `p`, 16 workers (one type per portfolio; `c`, `d`, `s` in phase 2) |
 | 5, 6 | more workers | phases 1, 2 and 4 with 8 and with 4 workers |
@@ -362,6 +362,7 @@ TIMEOUT=300 MEM_PER_WORKER=8G XOR_ROUNDS=200 bash scripts/slurm/submit.sh --subm
 | `GSHR` | 1 | global sharing: 1 AllGather, 2 Mallob, 3 ring |
 | `SHARE` | `all` | what the workers share: `all`, `no-clauses`, `no-backbones`, `no-free`, `none` (added to the name: `cmxpd+none-16`) |
 | `D_ORDER` | `occ` | candidate order of every `d` worker (inside its blocks) |
+| `D_MODE` | `steal` | `d` workers: `steal` (only the blocks they claim, no candidate checked twice) or `walk` (every part, own one first; added to the name: `d+walk-16`). Steal needs the whole board: with `SHARE` = `no-backbones`, `no-free` or `none` the `d` workers walk |
 | `EXTRA_ARGS` | | added to every run, e.g. `-bb-share-cand-local` |
 | `LAUNCHER` | `mpirun --bind-to none -np N` | e.g. `srun --mpi=pmix` if the cluster's MPI requires `srun` |
 | `STARTUP_TIMEOUT` | 180 | seconds for the MPI ranks to start; after that the run is killed and retried |

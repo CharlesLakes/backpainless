@@ -5,6 +5,7 @@
 #
 #   1  best        cmxpd cmx cmxp mxp mx cmp, 16 workers           (the 6 best of estudios 4 and 5)
 #   2  partition   d s c cd, 16 workers                            (d against s, c and cd; cmxpd vs cmxp from phase 1)
+#                  and d cd with D_MODE=walk (d+walk-16, cd+walk-16): the d workers re-check the parts of the others
 #   3  sharing     cmxpd-16 with SHARE = no-clauses, no-backbones, no-free, none (phase 1 is SHARE=all)
 #   4  diversity   m x p, 16 workers                               (one type per portfolio; c, d, s in phase 2)
 #   5  scaling     phases 1, 2 and 4 with 8 workers
@@ -52,7 +53,11 @@ configs() { # <workers> <mixes...>
 for phase in "${phases[@]}"; do
 	case $phase in
 	1) echo "== phase 1: the 6 best, 16 workers"; mapfile -t list < <(configs 16 "${BEST[@]}") ;;
-	2) echo "== phase 2: partition (d) against s, c and cd, 16 workers"; mapfile -t list < <(configs 16 "${PARTITION_STUDY[@]}") ;;
+	2)
+		echo "== phase 2: partition (d, steal) against s, c and cd, and the walk mode of d, 16 workers"
+		D_MODE=walk bash "$here/submit.sh" "${submit[@]}" d-16 cd-16
+		mapfile -t list < <(configs 16 "${PARTITION_STUDY[@]}")
+		;;
 	3)
 		echo "== phase 3: sharing, cmxpd-16 without each part"
 		for share in "${SHARES[@]}"; do
