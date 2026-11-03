@@ -296,25 +296,39 @@ bash scripts/slurm/collect.sh runs/mixes
 SHARE=none bash scripts/slurm/submit.sh --submit cmxpd-16     # runs/<campaign>/cmxpd+none-16
 ```
 
-### Estudio 6
+### Campaigns by phases
 
-`scripts/slurm/studies/estudio6.sh` runs the campaign of the 6 best portfolios of estudios 4 and 5 (cmxpd, cmx, cmxp,
-mxp, mx, cmp) on the `main` list, by phases in order of priority, all in `runs/estudio6` (`TIMEOUT=3600`):
+`scripts/slurm/campaign.sh <plan>` runs a campaign described by a plan, a bash file in `scripts/slurm/plans/` that
+sets its defaults and lists named phases in order of priority:
+
+```bash
+export CAMPAIGN=${CAMPAIGN:-mystudy}
+phase best -- cmx-16 cmxp-16
+phase sharing SHARE=no-clauses,none -- cmx-16 cmxp-16    # once per value (every combination of several variables)
+```
+
+Every phase calls `submit.sh` in the same campaign, so `collect.sh` puts them in one table; a configuration listed by
+several phases is submitted once, and a resubmission only runs what is missing. A wrong phase name stops the call before
+anything is submitted.
+
+`scripts/slurm/plans/paper.sh` is the final benchmark of the paper: the 6 best portfolios of estudios 4 and 5 (cmxpd,
+cmx, cmxp, mxp, mx, cmp) on the `main` list, all in `runs/paper` (`TIMEOUT=3600`; `CAMPAIGN=estudio6` resumes runs
+made under its former name, `studies/estudio6.sh`):
 
 | Phase | Question | Configurations |
 |---|---|---|
-| 1 | the 6 best | the 6 mixes, 16 workers |
-| 2 | partition | `d`, `s`, `c`, `cd`, 16 workers (and `cmxpd` vs `cmxp` of phase 1), `d` and `cd` with `D_MODE=walk` |
-| 3 | sharing | `cmxpd-16` with `SHARE` = `no-clauses`, `no-backbones`, `no-free`, `none` |
-| 4 | diversity | `m`, `x`, `p`, 16 workers (one type per portfolio; `c`, `d`, `s` in phase 2) |
-| 5, 6 | more workers | phases 1, 2 and 4 with 8 and with 4 workers |
+| `best` | the 6 best | the 6 mixes, 16 workers |
+| `partition` | partition | `d`, `s`, `c`, `cd`, 16 workers (and `cmxpd` vs `cmxp` of `best`), `d` and `cd` with `D_MODE=walk` |
+| `sharing` | sharing | the 6 mixes, 16 workers, with `SHARE` = `no-clauses`, `no-backbones`, `no-free`, `none` |
+| `diversity` | diversity | `m`, `x`, `p`, 16 workers (one type per portfolio; `c`, `d`, `s` in `partition`) |
+| `scaling-8`, `scaling-4` | more workers | `best`, `partition` and `diversity` with 8 and with 4 workers |
 
 ```bash
 python3 scripts/download_instances.py main --dest instances/main
 bash scripts/slurm/build_native.sh --slurm --force
-bash scripts/slurm/studies/estudio6.sh                  # plan of every phase
-bash scripts/slurm/studies/estudio6.sh --submit 1 2     # phases 1 and 2
-bash scripts/slurm/collect.sh runs/estudio6
+bash scripts/slurm/campaign.sh scripts/slurm/plans/paper.sh                           # plan of every phase
+bash scripts/slurm/campaign.sh scripts/slurm/plans/paper.sh --submit best partition   # these phases
+bash scripts/slurm/collect.sh runs/paper
 ```
 
 A 16-worker job takes 16 of the 18 4-CPU nodes, so these jobs run one at a time (8-worker jobs two at a time, 4-worker
