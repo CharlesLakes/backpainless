@@ -16,6 +16,9 @@
 #   bash scripts/slurm/submit.sh --submit cadiback-8 xor-8   # several configurations, each its own job
 #   CAMPAIGN=<name> bash scripts/slurm/submit.sh --submit xor-16   # same campaign: only the missing runs
 #
+# SHARE=no-clauses|no-backbones|no-free|none runs the configurations sharing less (default all); the profile goes
+# into the name: SHARE=none bash scripts/slurm/submit.sh --submit cmxpd-16 -> runs/<campaign>/cmxpd+none-16.
+#
 # Every variable of bench.sbatch (INSTANCES, REPS, TIMEOUT, CB_ORDERS, XOR_ROUNDS, ...) can be set in the environment,
 # the same for every configuration of the call. The jobs run at the same time as soon as Slurm has the CPUs; SERIAL=1
 # runs the jobs of a campaign one after the other (same job name and --dependency=singleton).
@@ -56,7 +59,11 @@ echo "campaign $CAMPAIGN (results in runs/$CAMPAIGN)"
 failed=()
 for c in "${configs[@]}"; do
 	exp=${c%-*} n=${c##*-}
-	EXPERIMENT=$exp WORKERS=$n LABEL=$c OUT=runs/$CAMPAIGN/$c bash "$here/bench.sbatch" "${submit[@]}" || failed+=("$c")
+	# a sharing profile other than all goes into the name: cmxpd+no-free-16
+	label=$c
+	[[ ${SHARE:-all} != all ]] && label=$exp+$SHARE-$n
+	EXPERIMENT=$exp WORKERS=$n LABEL=$label OUT=runs/$CAMPAIGN/$label bash "$here/bench.sbatch" "${submit[@]}" ||
+		failed+=("$label")
 done
 ((${#submit[@]})) || echo "nothing submitted: add --submit (resume later with CAMPAIGN=$CAMPAIGN)"
 echo "summary: bash $here/collect.sh runs/$CAMPAIGN"

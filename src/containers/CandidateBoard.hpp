@@ -5,6 +5,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <sstream>
+#include <string>
+#include <vector>
 
 /**
  * @brief Status of every variable, shared by the backbone solvers of a process (-bb-share-cand).
@@ -102,3 +105,33 @@ class CandidateBoard
 
 	std::unique_ptr<std::atomic<int8_t>[]> m_status;
 };
+
+/// @brief Which statuses a solver publishes on the board (-bb-share-cand-kind): both, only backbone literals or only
+/// free variables. Consuming is not filtered: a solver takes whatever the others published.
+enum class BoardKind
+{
+	ALL,
+	BACKBONE,
+	FREE
+};
+
+/// @brief Parses the comma-separated list of -bb-share-cand-kind (all, backbone, free). Returns false if it is empty or
+/// has an unknown name.
+inline bool
+parseBoardKindList(const std::string& list, std::vector<BoardKind>& kinds)
+{
+	kinds.clear();
+	std::stringstream stream(list);
+	std::string name;
+	while (std::getline(stream, name, ',')) {
+		if (name == "all")
+			kinds.push_back(BoardKind::ALL);
+		else if (name == "backbone")
+			kinds.push_back(BoardKind::BACKBONE);
+		else if (name == "free")
+			kinds.push_back(BoardKind::FREE);
+		else
+			return false;
+	}
+	return !kinds.empty() && list.back() != ',';
+}

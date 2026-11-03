@@ -19,12 +19,15 @@ using IDScaler = std::function<unsigned(const std::shared_ptr<BackboneSolverInte
  * @ingroup solving
  *
  * Portfolio characters (-solver=<string>): 'c' CadiBack (CaDiCaL), 's' CadiBackSqrt (CadiBack block by block),
- * 'd' CadiBackPartition (one block of candidates per d worker), 'x' DiverseBackboneSearch (random XOR exploration,
- * CryptoMiniSat).
+ * 'd' CadiBackPartition (one block of variables per d worker), 'x' DiverseBackboneSearch (random XOR exploration,
+ * CryptoMiniSat), 'm' MaxSatBackbone (rounds of MaxSAT).
  */
 class BackboneSolverFactory
 {
   public:
+	/// @brief The portfolio characters createSolver accepts, checked by Parameters::init before any thread starts.
+	static constexpr const char* SOLVER_TYPES = "csdxm";
+
 	/**
 	 * @brief Creates one backbone solver.
 	 * @param type Portfolio character of the solver.

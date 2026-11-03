@@ -1,6 +1,8 @@
 #include "Parameters.hpp"
 #include "ErrorCodes.hpp"
 #include "Logger.hpp"
+#include "containers/CandidateBoard.hpp"
+#include "solvers/BackboneSolverFactory.hpp"
 #include "solvers/CandidateOrder.hpp"
 #include "solvers/XorOptions.hpp"
 #include <algorithm>
@@ -116,15 +118,38 @@ Parameters::init(int argc, char** argv)
 		exit(PERR_ARGS_ERROR);
 	}
 
+	/* An unknown character would only be found by BackboneSolverFactory::createSolver, in the portfolio thread, where
+	 * exit() leaves the process hanging */
+	const std::string& portfolio = __globalParameters__.solver;
+	if (portfolio.empty() || portfolio.find_first_not_of(BackboneSolverFactory::SOLVER_TYPES) != std::string::npos) {
+		LOGERROR("Invalid -solver=%s: expected a non empty string of %s",
+				 portfolio.c_str(),
+				 BackboneSolverFactory::SOLVER_TYPES);
+		exit(PERR_ARGS_ERROR);
+	}
+
 	const std::string& shareMask = __globalParameters__.backboneShareUnits;
 	if (shareMask.empty() || shareMask.find_first_not_of("01") != std::string::npos) {
 		LOGERROR("Invalid -bb-share-units=%s: expected a non empty mask of 0 and 1", shareMask.c_str());
 		exit(PERR_ARGS_ERROR);
 	}
 
+	const std::string& learntMask = __globalParameters__.backboneShareLearnt;
+	if (learntMask.empty() || learntMask.find_first_not_of("01") != std::string::npos) {
+		LOGERROR("Invalid -bb-share-learnt=%s: expected a non empty mask of 0 and 1", learntMask.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
 	const std::string& candMask = __globalParameters__.backboneShareCandidates;
 	if (candMask.empty() || candMask.find_first_not_of("01pc") != std::string::npos) {
 		LOGERROR("Invalid -bb-share-cand=%s: expected a non empty mask of 0, 1, p and c", candMask.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
+	std::vector<BoardKind> boardKinds;
+	if (!parseBoardKindList(__globalParameters__.backboneShareCandidatesKind, boardKinds)) {
+		LOGERROR("Invalid -bb-share-cand-kind=%s: expected a comma-separated list of all, backbone, free",
+				 __globalParameters__.backboneShareCandidatesKind.c_str());
 		exit(PERR_ARGS_ERROR);
 	}
 

@@ -36,7 +36,7 @@ CadiBackSqrt::initCandidates(std::vector<int>& candidates)
 
 	m_blockOf.assign(m_nbVars + 1, NO_BLOCK);
 	for (size_t i = 0; i < n; i++)
-		m_blockOf[std::abs(candidates[i])] = blockOfPosition(i);
+		m_blockOf[std::abs(candidates[i])] = blockOf(i, candidates[i]);
 
 	LOG1("%s %d: %zu blocks of %zu candidates", variantName(), this->getSolverId(), m_blockCount, m_blockSize);
 }

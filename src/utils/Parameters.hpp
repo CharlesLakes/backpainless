@@ -37,12 +37,22 @@
 		  "bb-share-units",                                                                                                  \
 		  "1",                                                                                                               \
 		  "Mask of 0/1 cycled over the solver ids: workers with 1 export their backbone literals as units (10 = even ids)")  \
+	PARAM(backboneShareLearnt,                                                                                            \
+		  std::string,                                                                                                       \
+		  "bb-share-learnt",                                                                                                 \
+		  "1",                                                                                                               \
+		  "Mask of 0/1 cycled over the solver ids: workers with 0 do not export their learnt clauses (units included)")      \
 	PARAM(backboneShareCandidates,                                                                                        \
 		  std::string,                                                                                                       \
 		  "bb-share-cand",                                                                                                   \
 		  "0",                                                                                                               \
 		  "Mask cycled over the solver ids for the board of decided variables: 0 off, 1 publish and consume, p publish, "    \
 		  "c consume")                                                                                                       \
+	PARAM(backboneShareCandidatesKind,                                                                                    \
+		  std::string,                                                                                                       \
+		  "bb-share-cand-kind",                                                                                              \
+		  "all",                                                                                                             \
+		  "Statuses published on the board, comma-separated list cycled over the solver ids: all, backbone, free")           \
 	PARAM(backboneShareCandidatesLocal,                                                                                   \
 		  bool,                                                                                                              \
 		  "bb-share-cand-local",                                                                                             \
@@ -220,12 +230,16 @@ extern Parameters __globalParameters__;
 		 "    " BOLD "K" RESET ": reset to 1 after a SAT answer, multiplied by K after an UNSAT answer\n"             \
 		 "    e.g. " YELLOW "-bb-chunk=0,10" RESET ": even ids use 0, odd ids use 10\n"                                  \
 		 "  " YELLOW "-bb-no-flip" RESET ": Do not use flippable literals to drop candidates\n"                       \
+		 "  " YELLOW "-bb-share-learnt" RESET ": Mask of 0/1 per worker, 0 = do not export learnt clauses (default 1)\n" \
 		 "  " YELLOW "-bb-share-cand" RESET ": Board of decided variables (backbone or free), one mode per worker\n"   \
 		 "    " BOLD "0" RESET ": off (default)   " BOLD "1" RESET ": publish and consume\n"                            \
 		 "    " BOLD "p" RESET ": publish only    " BOLD "c" RESET ": consume only\n"                                   \
 		 "    The mask is cycled over the solver ids, e.g. " YELLOW "-bb-share-cand=1c" RESET                            \
 		 ": even ids publish and consume, odd ids only consume\n"                                                     \
 		 "    With " YELLOW "-dist" RESET ", the board is exchanged across MPI ranks by the global sharing strategy\n"     \
+		 "  " YELLOW "-bb-share-cand-kind" RESET ": What each worker publishes on the board (comma-separated)\n"       \
+		 "    " BOLD "all" RESET " (default), " BOLD "backbone" RESET " (backbone literals only) or " BOLD "free" RESET   \
+		 " (free variables only)\n"                                                                                   \
 		 "  " YELLOW "-bb-share-cand-local" RESET ": With -dist, keep the board inside each process\n"                   \
 		 "  " YELLOW "-bb-order" RESET ": Order of the initial candidates, one name per worker (comma-separated)\n"     \
 		 "    " BOLD "natural" RESET ": variable index (default)   " BOLD "reverse" RESET ": decreasing index\n"       \
