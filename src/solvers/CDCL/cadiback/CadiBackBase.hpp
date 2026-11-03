@@ -102,7 +102,10 @@ class CadiBackBase
 
 	/// @brief Fills @p chunk (given empty) with the candidates whose negations form the next constraint. Default: the
 	/// first min(@ref m_chunkSize, |candidates|) ones.
-	/// @details @p candidates is not empty and has no fixed literal. The chunk must be a non-empty subset of it.
+	/// @details @p candidates is not empty and has no fixed literal. The chunk must be a subset of it. An empty chunk
+	/// means that the remaining candidates are left to other solvers (CadiBackPartition in steal mode): the loop then
+	/// takes their answers from the board and calls selectChunk again, so a variant returning an empty chunk must have
+	/// waited a little (no busy loop) and must only do it while the board brings the answers (it consumes the board).
 	virtual void selectChunk(const std::vector<int>& candidates, std::vector<int>& chunk);
 
 	/// @brief Called after a SAT answer under the constraint of @p chunk. Default: filterWithModel, and with chunking
@@ -129,6 +132,12 @@ class CadiBackBase
 
 	/// @brief Removes the literals of @p lits from @p candidates, keeping the order of the others.
 	void removeCandidates(std::vector<int>& candidates, const std::vector<int>& lits);
+
+  private:
+	/// @brief Marks of removeCandidates (index: variable), all 0 between two calls.
+	std::vector<char> m_removeMarks;
+
+  protected:
 
 	/// @brief With -bb-share-cand consume: drops the candidates whose variable another solver published as free and
 	/// moves the ones it published as backbone to @ref m_backbone (also added to CaDiCaL as units). Called by the loop
@@ -230,6 +239,7 @@ class CadiBackBase
 	unsigned long m_boardBackbone = 0; ///< backbone literals taken from the board
 	unsigned long m_publishedFree = 0;	   ///< free variables this solver was the first to publish on the board
 	unsigned long m_publishedBackbone = 0; ///< backbone literals this solver was the first to publish on the board
+	unsigned long m_unsatProved = 0;	   ///< backbone literals proven by this solver's UNSAT answers
 	double m_firstModelSeconds = 0;		   ///< duration of the first SAT call
 	bool m_firstModelGiven = false;		   ///< the first model is the -model assignment
 

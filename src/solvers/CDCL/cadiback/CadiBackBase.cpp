@@ -240,7 +240,9 @@ CadiBackBase::solve(const std::vector<int>& cube)
 		/* Gamma <- selected chunk of Lambda, rho <- OR of the negations */
 		chunk.clear();
 		selectChunk(candidates, chunk);
-		assert(!chunk.empty() && chunk.size() <= candidates.size());
+		assert(chunk.size() <= candidates.size());
+		if (chunk.empty())
+			continue; /* left to the other solvers: the next iteration takes their answers from the board */
 		constraint.clear();
 		for (int lit : chunk)
 			constraint.push_back(-lit);
@@ -306,6 +308,7 @@ CadiBackBase::onUnsat(std::vector<int>& candidates, const std::vector<int>& chun
 {
 	for (int lit : chunk)
 		commitBackbone(lit);
+	m_unsatProved += chunk.size();
 	removeCandidates(candidates, chunk);
 
 	if (m_chunkRate != 0) {
@@ -335,13 +338,16 @@ CadiBackBase::removeCandidates(std::vector<int>& candidates, const std::vector<i
 		return;
 	}
 
-	std::vector<char> removed(m_nbVars + 1, 0);
+	/* Reused marks: a chunk outside the prefix (CadiBackPartition) costs O(|candidates|), not O(#variables) */
+	m_removeMarks.resize(m_nbVars + 1, 0);
 	for (int lit : lits)
-		removed[std::abs(lit)] = 1;
+		m_removeMarks[std::abs(lit)] = 1;
 	candidates.erase(std::remove_if(candidates.begin(),
 									candidates.end(),
-									[&removed](int lit) { return removed[std::abs(lit)]; }),
+									[this](int lit) { return m_removeMarks[std::abs(lit)]; }),
 					 candidates.end());
+	for (int lit : lits)
+		m_removeMarks[std::abs(lit)] = 0;
 }
 
 void
@@ -732,7 +738,7 @@ CadiBackBase::printStatistics()
 		std::cout << "c|   board, solver " << this->getSolverId() << " (" << variantName() << ", order "
 				  << candidateOrderName(m_candidateOrder) << ", chunk " << m_chunkRate << "): published first "
 				  << m_publishedFree << " free / " << m_publishedBackbone << " backbone, took " << m_boardFree
-				  << " free / " << m_boardBackbone << " backbone\n";
+				  << " free / " << m_boardBackbone << " backbone, proved " << m_unsatProved << " by UNSAT\n";
 }
 
 void
