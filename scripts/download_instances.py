@@ -7,11 +7,14 @@ Usage:
     python3 scripts/download_instances.py main --dry-run    # print what would be downloaded
     python3 scripts/download_instances.py all --limit 30    # 30 instances that CaDiCaL solves fastest
     python3 scripts/download_instances.py --select          # rebuild main and all from the competition data
+    python3 scripts/download_instances.py --select-recent   # rebuild recent from the GBD metadata
 
 The lists live in scripts/benchmarks/ (one instance per line, the GBD hash in the first column):
     example.tsv           (example) 20 instances for quick runs and first tests of a configuration
     sc-cadical-1800.tsv   (all) main track instances of the SAT Competitions 2022-2024 that CaDiCaL solved in
                           at most 1800 s, with a verified result (SAT only by default: an UNSAT formula has no backbone)
+    sc-recent-sat.tsv     (recent) the SAT instances of the main track of 2025 and 2026 according to GBD (no runtime
+                          published: the CaDiCaL time is measured with scripts/slurm/models.sbatch)
     sc-cadical-100.tsv    (main) 100 of them, not in example.tsv, spread over the families, the years and the CaDiCaL
                           times (as many in each of 0-10, 10-60, 60-300 and 300-1800 s): the benchmark set the
                           conclusions are drawn from
@@ -37,7 +40,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LISTS = os.path.join(ROOT, "scripts", "benchmarks")
 GBD_FILE = "https://benchmark-database.de/file/{}"
 GBD_META = "https://benchmark-database.de/getdatabase/meta"
-LIST_FILES = {"example": "example", "main": "sc-cadical-100", "all": "sc-cadical-1800"}
+LIST_FILES = {"example": "example", "main": "sc-cadical-100", "all": "sc-cadical-1800", "recent": "sc-recent-sat"}
+RECENT_TRACKS = {"main_2026": 2026, "main_2025": 2025}
 TIME_BUCKETS = [10, 60, 300]
 
 # Per competition: detailed results of the main track (hash x solver -> seconds, 10000 = timeout), the CaDiCaL column,
@@ -86,6 +90,24 @@ def read_csv(url, member, cache):
     if "," not in first and "\t" not in first:
         text = "\n".join(",".join(line.split()) for line in text.splitlines())
     return list(csv.DictReader(io.StringIO(text), dialect="excel-tab" if "\t" in first else "excel"))
+
+
+def select_recent():
+    """SAT instances of the recent main tracks (no per-instance runtime published), the most recent year first."""
+    with tempfile.NamedTemporaryFile(suffix=".db") as f:
+        f.write(fetch(GBD_META))
+        f.flush()
+        with sqlite3.connect(f.name) as db:
+            rows = db.execute("SELECT t.value, f.hash, n.value, f.family, f.result FROM features f "
+                              "JOIN track t ON t.hash = f.hash JOIN filename n ON n.hash = f.hash "
+                              "WHERE t.value IN (%s)"
+                              % ",".join("?" * len(RECENT_TRACKS)), list(RECENT_TRACKS)).fetchall()
+    chosen = {}
+    for track, h, name, family, result in sorted(rows, key=lambda r: (-RECENT_TRACKS[r[0]], r[1])):
+        if result == "sat" and h not in chosen:
+            chosen[h] = {"hash": h, "file": f"{h}-{name}", "year": RECENT_TRACKS[track], "family": family,
+                         "result": result, "cadical_seconds": ""}
+    return list(chosen.values())
 
 
 def gbd_families():
@@ -199,6 +221,8 @@ def main():
     parser.add_argument("-j", "--jobs", type=int, default=4, help="parallel downloads (default: 4)")
     parser.add_argument("--select", action="store_true",
                         help="rebuild the main and all lists of scripts/benchmarks/ from the competition results and exit")
+    parser.add_argument("--select-recent", action="store_true",
+                        help="rebuild the recent list of scripts/benchmarks/ from the GBD metadata and exit")
     parser.add_argument("--select-count", type=int, default=100, help="size of the main list (default: 100)")
     parser.add_argument("--select-time", type=float, default=1800, help="time limit of --select (default: 1800 s)")
     parser.add_argument("--select-unsat", action="store_true", help="--select also keeps UNSAT instances")
@@ -215,10 +239,17 @@ def main():
             print(f"written {os.path.relpath(path, ROOT)} ({len(part)} instances)", file=sys.stderr)
         return 0
 
+    if opts.select_recent:
+        rows = select_recent()
+        path = os.path.join(LISTS, LIST_FILES["recent"] + ".tsv")
+        write_list(path, rows)
+        print(f"written {os.path.relpath(path, ROOT)} ({len(rows)} instances)", file=sys.stderr)
+        return 0
+
     rows = []
     for name in dict.fromkeys(opts.lists or ["example", "main"]):
         part = read_list(LIST_FILES[name])
-        if name != "example":
+        if name not in ("example", "recent"):
             if opts.max_time is not None:
                 part = [r for r in part if float(r["cadical_seconds"]) <= opts.max_time]
             part = part[:opts.limit] if opts.limit is not None else part
