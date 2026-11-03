@@ -3,7 +3,7 @@
 # worker with 4 CPUs. The experiment is a mix of worker types, split as evenly as possible among the N workers:
 #   c  CadiBack                       m  MaxSAT (EvalMaxSAT on CaDiCaL)
 #   x  XOR on CryptoMiniSat (-solver=x)   p  XOR on CaDiCaL before CadiBack (-bb-xor-pre)
-#   d  CadiBack with one block of candidates per d worker, each starting with its own (D_ORDER for all of them)
+#   d  CadiBack with one part of the variables per d worker, each checking only the blocks it claims (D_MODE=steal)
 # e.g. c-16 (16 c), cp-16 (8 c, 8 p), cmxp-16 (4 of each). Also:
 #   all-<N>       the 15 mixes of c, m, x, p (every non-empty subset), one job each (d only in explicit mixes)
 #   cadiback-<N>, xor-<N>, maxsat-<N>   the mixes c, cx, cxm of the first campaigns
@@ -18,6 +18,7 @@
 #
 # SHARE=no-clauses|no-backbones|no-free|none runs the configurations sharing less (default all); the profile goes
 # into the name: SHARE=none bash scripts/slurm/submit.sh --submit cmxpd-16 -> runs/<campaign>/cmxpd+none-16.
+# D_MODE=walk runs the d workers in walk mode (default steal), also in the name: d+walk-16.
 #
 # Every variable of bench.sbatch (INSTANCES, REPS, TIMEOUT, CB_ORDERS, XOR_ROUNDS, ...) can be set in the environment,
 # the same for every configuration of the call. The jobs run at the same time as soon as Slurm has the CPUs; SERIAL=1
@@ -61,7 +62,8 @@ for c in "${configs[@]}"; do
 	exp=${c%-*} n=${c##*-}
 	# a sharing profile other than all goes into the name: cmxpd+no-free-16
 	label=$c
-	[[ ${SHARE:-all} != all ]] && label=$exp+$SHARE-$n
+	[[ ${D_MODE:-steal} == walk ]] && label=${label%-$n}+walk-$n
+	[[ ${SHARE:-all} != all ]] && label=${label%-$n}+$SHARE-$n
 	EXPERIMENT=$exp WORKERS=$n LABEL=$label OUT=runs/$CAMPAIGN/$label bash "$here/bench.sbatch" "${submit[@]}" ||
 		failed+=("$label")
 done

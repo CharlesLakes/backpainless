@@ -57,8 +57,14 @@ class BackboneSolverFactory
 		unsigned int nbVars);
 
 	/// @brief Gives every d worker (CadiBackPartition) its part: its index among the d workers sharing a board, and
-	/// their number (call after the ids are set).
+	/// their number, and its mode (-bb-part-mode; call after the ids are set).
 	static void setPartitions(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers);
+
+	/// @brief True if the d workers of all the ranks share one board (and one partition).
+	static bool partitionsAreGlobal();
+
+	/// @brief Number of d workers sharing a board: of every rank when partitionsAreGlobal, else of @p solvers.
+	static unsigned int countPartitionWorkers(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers);
 
 	/// @brief Sets the ids of the solvers using the scalers, then calls their native diversification.
 	static void diversification(

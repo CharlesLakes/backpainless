@@ -11,9 +11,12 @@
 #   m  MaxSatBackbone: rounds of EvalMaxSAT on CaDiCaL, then the CadiBack loop
 #   x  DiverseBackboneSearch: XOR exploration on CryptoMiniSat, then the CadiBack loop on CryptoMiniSat
 #   p  CadiBack with the XOR exploration first, on CaDiCaL (-bb-xor-pre), then the CadiBack loop on the same solver
-#   d  CadiBackPartition: the variables are split into one block per d worker (of all the ranks), the same blocks on
-#      every worker; the k-th d worker starts with block k, then k+1, ...; the blocks of the others come mostly
-#      decided through the candidate board
+#   d  CadiBackPartition: the variables are split into one part per d worker (of all the ranks), the same parts on
+#      every worker. D_MODE=steal (default): every part is cut into blocks, a d worker only checks the blocks it
+#      claims (its own part from the front, then blocks stolen from the end of the others) and takes the rest from
+#      the candidate board, so no candidate is checked twice. D_MODE=walk: the k-th d worker checks part k, then
+#      k+1, ..., and re-checks what the board has not decided yet. Steal needs the whole board: with SHARE=no-backbones,
+#      no-free or none the d workers walk.
 #   s  CadiBackSqrt: the CadiBack loop block by block, sqrt(#candidates) blocks
 # Sharing: SHARE=all (default), no-clauses, no-backbones, no-free or none (see "Configuration"); a profile other than
 #   all is added to the name of the experiment, e.g. cmxpd+no-free-16.
@@ -80,7 +83,14 @@ none) SHARE_ARGS=(-bb-share-cand=0 -bb-share-learnt=0 -bb-share-units=0) ;;
 *) echo "invalid SHARE=$SHARE: expected all, no-clauses, no-backbones, no-free or none" >&2; exit 1 ;;
 esac
 [[ $SHARE == all ]] && SHARE_TAG= || SHARE_TAG=+$SHARE
-LABEL=${LABEL:-$EXPERIMENT$SHARE_TAG-$WORKERS} # name of the experiment in the results
+# d workers: steal (only the blocks they claim) or walk (every part, own one first); walk goes into the name
+D_MODE=${D_MODE:-steal}
+case $D_MODE in
+steal) D_TAG= ;;
+walk) D_TAG=+walk ;;
+*) echo "invalid D_MODE=$D_MODE: expected steal or walk" >&2; exit 1 ;;
+esac
+LABEL=${LABEL:-$EXPERIMENT$D_TAG$SHARE_TAG-$WORKERS} # name of the experiment in the results
 SERIAL=${SERIAL:-0}                         # 1: --dependency=singleton, jobs of the same JOB_NAME run one at a time
 JOB_NAME=${JOB_NAME:-backpainless}
 EXTRA_ARGS=${EXTRA_ARGS:-}                  # added to every run, e.g. "-bb-share-cand-local"
@@ -164,7 +174,7 @@ build_worker_args() {
 	WORKER_ARGS=(-dist "-gshr-strat=$GSHR" -c=1 "-solver=$W_SOLVER" "-bb-order=${W_ORDER[*]}"
 		"-bb-chunk=${W_CHUNK[*]}" "${SHARE_ARGS[@]}" "-bb-xor-m=${W_XM[*]}" "-bb-xor-density=${W_XD[*]}"
 		"-bb-xor-rounds=${W_ROUNDS[*]}" "-bb-xor-patience=${W_PAT[*]}" "-bb-xor-confl=$XOR_CONFL" "-bb-xor-pre=$W_PRE"
-		"-bb-maxsat-rounds=$MAXSAT_ROUNDS")
+		"-bb-maxsat-rounds=$MAXSAT_ROUNDS" "-bb-part-mode=$D_MODE")
 }
 worker_table() {
 	local i t
@@ -269,7 +279,7 @@ deadline=$((SECONDS + (left >= 0 ? left : 1 << 30)))
 worker_table >"$OUT/workers.tsv"
 {
 	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_WORKER MEM_PER_CPU EXCLUDE INSTANCES REPS TIMEOUT GSHR BINARY NATIVE CB_ORDERS CB_CHUNKS XOR_MS \
-		XOR_DENSITIES XOR_ROUNDS PRE_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS D_ORDER SHARE EXTRA_ARGS total; do
+		XOR_DENSITIES XOR_ROUNDS PRE_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS D_ORDER D_MODE SHARE EXTRA_ARGS total; do
 		printf '%s=%q\n' "$v" "${!v}"
 	done
 } >"$OUT/config.env"

@@ -298,6 +298,15 @@ BRUTEFORCE_CONFIGS = [
     ["-c=8", "-solver=ccdd", "-bb-chunk=0,10,1,0", "-bb-share-cand=1c", "-bb-share-units=10"],
     ["-c=6", "-solver=dsx", "-bb-share-cand=1", "-bb-no-flip"],
     ["-c=4", "-solver=d", "-bb-order=occ,natural,random,reverse", "-bb-chunk=0,1", "-bb-share-cand=1"],
+    # d in steal mode (the default with the board): only the claimed blocks, the rest from the board; walk mode, and
+    # the fallback to walk without the whole board
+    ["-c=4", "-solver=d", "-bb-share-cand=1", "-bb-part-block=1"],
+    ["-c=4", "-solver=d", "-bb-share-cand=1", "-bb-part-block=2", "-bb-chunk=1"],
+    ["-c=4", "-solver=d", "-bb-share-cand=1", "-bb-part-mode=steal,walk", "-bb-part-block=3", "-bb-chunk=0,10"],
+    ["-c=8", "-solver=d", "-bb-share-cand=1", "-bb-part-block=1", "-bb-chunk=1,0", "-bb-order=occ,random"],
+    ["-c=4", "-solver=d", "-bb-share-cand=1", "-bb-part-mode=walk"],
+    ["-c=3", "-solver=d", "-bb-share-cand=1", "-bb-share-cand-kind=free"],
+    ["-c=6", "-solver=cdx", "-bb-share-cand=1", "-bb-part-block=1", "-bb-xor-pre=010", "-bb-chunk=0,1"],
     # -bb-share-learnt: no learnt clause export on the workers with 0
     ["-c=4", "-bb-share-learnt=0"],
     ["-c=6", "-solver=cmxd", "-bb-share-learnt=10", "-bb-share-cand=1", "-bb-xor-export=1"],
@@ -483,7 +492,10 @@ def check_partition(run, nb_parts):
 PARTITION_CONFIGS = [  # (arguments, number of d workers)
     (["-c=4", "-solver=d", "-bb-order=occ,natural,random,reverse", "-bb-chunk=1"], 4),
     (["-c=6", "-solver=cd", "-bb-order=natural,occ,random", "-bb-chunk=0,1,10"], 3),
+    (["-c=4", "-solver=d", "-bb-order=occ,natural,random,reverse", "-bb-chunk=1", "-bb-part-mode=walk"], 4),
 ]
+STEAL_LOG = re.compile(r"CadiBackPartition (\d+): steal mode, \d+ blocks of \d+ variables per part")
+PROVED_LOG = re.compile(r"proved (\d+) by UNSAT")
 
 
 def suite_partition(opts, report, workdir, launcher=(), extra=()):
@@ -500,8 +512,33 @@ def suite_partition(opts, report, workdir, launcher=(), extra=()):
                                launcher=launcher)
         error = check_run(run, *expected) if expected else None
         error = error or check_partition(run, nb_d)
+        stealing = "-bb-part-mode=walk" not in args
+        if error is None and stealing != bool(STEAL_LOG.search(run.stdout)):
+            error = "steal mode expected" if stealing else "steal mode used with -bb-part-mode=walk"
+        # backbone literals proven by the UNSAT answers of all the workers over the backbone size: 1 when no
+        # literal is proven twice
+        proved = sum(int(p) for p in PROVED_LOG.findall(run.stdout))
+        ratio = proved / max(1, len(run.backbone))
         label = f"{'mpi ' if launcher else ''}partition {' '.join(args)}"
-        print(f"  {label}: {'OK' if error is None else 'FAIL ' + error}", flush=True)
+        print(f"  {label}: {'OK' if error is None else 'FAIL ' + error}, proved by UNSAT {proved} "
+              f"for a backbone of {len(run.backbone)} ({ratio:.2f}x)", flush=True)
+        report.record(label, error, run)
+
+    # steal mode in one process: a block is claimed by one worker only, so no backbone literal is proven twice
+    if launcher:
+        return
+    for args in (["-c=4", "-solver=d", "-bb-chunk=1", "-bb-part-block=4"],
+                 ["-c=8", "-solver=d", "-bb-chunk=1,0,10", "-bb-order=occ,random"]):
+        run = run_backpainless(opts.binary, path, [*args, "-bb-share-cand=1", "-v=1", *SHARING_FAST])
+        error = check_run(run, *expected) if expected else None
+        proved = sum(int(p) for p in PROVED_LOG.findall(run.stdout))
+        if error is None and len(STEAL_LOG.findall(run.stdout)) < 2:
+            error = "fewer than 2 d workers used the steal mode"
+        elif error is None and proved > len(run.backbone):
+            error = f"{proved} literals proven by UNSAT for a backbone of {len(run.backbone)}: some twice"
+        label = f"partition steal exclusive {' '.join(args)}"
+        print(f"  {label}: proved {proved} / backbone {len(run.backbone)} {'OK' if error is None else 'FAIL ' + error}",
+              flush=True)
         report.record(label, error, run)
 
 
@@ -554,6 +591,14 @@ def suite_robustness(opts, report, workdir):
             if run.returncode != PERR_ARGS_ERROR or run.status is not None:
                 error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
             report.record(f"{option}={mask!r} rejected", error, run)
+
+    # -bb-part-mode / -bb-part-block: validated before solving
+    for option in ("-bb-part-mode=", "-bb-part-mode=steal,", "-bb-part-mode=claim", "-bb-part-block=-1"):
+        run = run_backpainless(opts.binary, demo, ["-c=2", "-solver=d", option], timeout=30)
+        error = None
+        if run.returncode != PERR_ARGS_ERROR or run.status is not None:
+            error = f"exit {run.returncode}, status {run.status!r}, expected exit {PERR_ARGS_ERROR} and no answer"
+        report.record(f"{option!r} rejected", error, run)
 
     # -model-use: same validation; -model: a missing file is rejected, an unreadable one is ignored (exit() from the
     # portfolio thread would hang), the answer stays right

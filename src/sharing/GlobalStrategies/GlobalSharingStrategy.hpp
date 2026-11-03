@@ -125,13 +125,15 @@ class GlobalSharingStrategy : public SharingStrategy
 	/**
 	 * @brief Merges the boards of all the ranks into the local one (MPI_Allreduce with MPI_MAX on the raw statuses).
 	 * A status only goes from unknown to its final value and two ranks never disagree on it, so the maximum is the
-	 * union of what the ranks know.
+	 * union of what the ranks know. The claims of the d workers (PartClaims), if any, follow in a second reduction.
 	 */
 	void exchangeCandidateBoard();
 
 	std::shared_ptr<CandidateBoard> m_board; ///< Board exchanged across ranks, nullptr if none
 	std::vector<int8_t> m_boardBuffer;		 ///< Snapshot of the local board, reduced in place
 	unsigned long m_boardReceived = 0;		 ///< Statuses learnt from the other ranks
+	std::vector<PartClaims::Code> m_claimsBuffer; ///< Snapshot of the claims of the d workers, reduced in place
+	unsigned long m_claimsReceived = 0;		 ///< Block owners changed by the other ranks
 
 	GlobalSharingStatistics gstats; ///< Statistics for global sharing
 	bool requests_sent; ///< Flag indicating if requests to end were sent to the root

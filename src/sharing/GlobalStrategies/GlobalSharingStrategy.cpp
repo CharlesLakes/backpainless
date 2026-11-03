@@ -29,6 +29,8 @@ GlobalSharingStrategy::printStats()
 			gstats.messagesSent);
 	if (m_board)
 		LOGSTAT("Global Strategy: candidate board, %lu statuses received from other ranks", m_boardReceived);
+	if (m_board && m_board->claims())
+		LOGSTAT("Global Strategy: %lu block claims of d workers received from other ranks", m_claimsReceived);
 }
 
 void
@@ -43,6 +45,15 @@ GlobalSharingStrategy::exchangeCandidateBoard()
 	unsigned int added = m_board->merge(m_boardBuffer.data());
 	m_boardReceived += added;
 	LOGDEBUG1("[GStrat] candidate board: %u statuses received", added);
+
+	/* Claims of the d workers: the reduction keeps the highest code, i.e. the lowest d index, on every rank */
+	if (PartClaims* claims = m_board->claims()) {
+		m_claimsBuffer.resize(claims->size());
+		claims->snapshot(m_claimsBuffer.data());
+		TESTRUNMPI(MPI_Allreduce(
+			MPI_IN_PLACE, m_claimsBuffer.data(), (int)claims->size(), MPI_INT16_T, MPI_MAX, MPI_COMM_WORLD));
+		m_claimsReceived += claims->mergeMax(m_claimsBuffer.data());
+	}
 }
 
 std::chrono::microseconds

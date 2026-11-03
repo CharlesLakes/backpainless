@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+#include <sstream>
 #include <type_traits>
 #include <thread>
 
@@ -138,6 +139,24 @@ Parameters::init(int argc, char** argv)
 	if (learntMask.empty() || learntMask.find_first_not_of("01") != std::string::npos) {
 		LOGERROR("Invalid -bb-share-learnt=%s: expected a non empty mask of 0 and 1", learntMask.c_str());
 		exit(PERR_ARGS_ERROR);
+	}
+
+	{
+		std::stringstream modes(__globalParameters__.backbonePartMode);
+		std::string mode;
+		bool valid = !__globalParameters__.backbonePartMode.empty() && __globalParameters__.backbonePartMode.back() != ',';
+		while (valid && std::getline(modes, mode, ','))
+			valid = mode == "steal" || mode == "walk";
+		if (!valid) {
+			LOGERROR("Invalid -bb-part-mode=%s: expected a comma-separated list of steal and walk",
+					 __globalParameters__.backbonePartMode.c_str());
+			exit(PERR_ARGS_ERROR);
+		}
+		if (__globalParameters__.backbonePartBlock < 0) {
+			LOGERROR("Invalid -bb-part-block=%d: expected 0 (automatic) or a positive number of variables",
+					 __globalParameters__.backbonePartBlock);
+			exit(PERR_ARGS_ERROR);
+		}
 	}
 
 	const std::string& modelMask = __globalParameters__.initialModelUse;
