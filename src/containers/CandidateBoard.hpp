@@ -1,5 +1,7 @@
 #pragma once
 
+#include "containers/PartClaims.hpp"
+
 #include <atomic>
 #include <cassert>
 #include <cstdint>
@@ -63,6 +65,13 @@ class CandidateBoard
 
 	unsigned int nbVars() const { return m_nbVars; }
 
+	/// @brief Table of the blocks claimed by the d workers (-bb-part-mode=steal), exchanged with the board. Set before
+	/// the solvers start, on every rank or on none, so that the collective of the exchange stays matched.
+	void setClaims(const std::shared_ptr<PartClaims>& claims) { m_claims = claims; }
+
+	/// @brief Table of claims, nullptr if there is no d worker.
+	PartClaims* claims() const { return m_claims.get(); }
+
 	/// @brief Copies the raw statuses of the variables 1..nbVars into @p out[0..nbVars-1] (0 = unknown).
 	void snapshot(int8_t* out) const
 	{
@@ -104,6 +113,8 @@ class CandidateBoard
 	unsigned int m_nbVars;
 
 	std::unique_ptr<std::atomic<int8_t>[]> m_status;
+
+	std::shared_ptr<PartClaims> m_claims;
 };
 
 /// @brief Which statuses a solver publishes on the board (-bb-share-cand-kind): both, only backbone literals or only
