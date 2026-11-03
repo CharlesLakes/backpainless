@@ -77,16 +77,10 @@ BackboneSolverFactory::setPartitions(const std::vector<std::shared_ptr<BackboneS
 	/* The parts are split among the d workers that share a board: all the ranks when the board is exchanged, else the
 	 * process. -solver is cycled over the global ids (PortfolioSimple), so the d workers of every rank are known */
 	const std::string& portfolio = __globalParameters__.solver;
-	const bool global = __globalParameters__.enableDistributed && !__globalParameters__.backboneShareCandidatesLocal &&
-						mpi_world_size > 1;
-	unsigned int total = 0;
-	if (global) {
-		for (int id = 0; id < __globalParameters__.cpus * mpi_world_size; id++)
-			total += portfolio[id % portfolio.size()] == 'd';
-	} else {
-		for (auto solver : solvers)
-			total += solver->getSolverType() == BackboneSolverType::CADIBACK_PARTITION;
-	}
+	const bool global = partitionsAreGlobal();
+	const unsigned int total = countPartitionWorkers(solvers);
+	std::vector<CadiBackPartition::Mode> modes;
+	CadiBackPartition::parseModeList(__globalParameters__.backbonePartMode, modes); /* validated by Parameters::init */
 
 	unsigned int localIndex = 0;
 	for (auto solver : solvers) {
@@ -100,8 +94,31 @@ BackboneSolverFactory::setPartitions(const std::vector<std::shared_ptr<BackboneS
 				index += portfolio[id % portfolio.size()] == 'd';
 		}
 		partition->setPartition(index, total);
+		partition->setMode(modes[solver->getSolverId() % modes.size()]);
 		LOGDEBUG1("Solver %d owns part %u of %u", solver->getSolverId(), index, total);
 	}
+}
+
+bool
+BackboneSolverFactory::partitionsAreGlobal()
+{
+	return __globalParameters__.enableDistributed && !__globalParameters__.backboneShareCandidatesLocal &&
+		   mpi_world_size > 1;
+}
+
+unsigned int
+BackboneSolverFactory::countPartitionWorkers(const std::vector<std::shared_ptr<BackboneSolverInterface>>& solvers)
+{
+	const std::string& portfolio = __globalParameters__.solver;
+	unsigned int total = 0;
+	if (partitionsAreGlobal()) {
+		for (int id = 0; id < __globalParameters__.cpus * mpi_world_size; id++)
+			total += portfolio[id % portfolio.size()] == 'd';
+	} else {
+		for (auto solver : solvers)
+			total += solver->getSolverType() == BackboneSolverType::CADIBACK_PARTITION;
+	}
+	return total;
 }
 
 std::shared_ptr<CandidateBoard>
@@ -122,6 +139,20 @@ BackboneSolverFactory::connectCandidateBoard(const std::vector<std::shared_ptr<B
 				  solver->getSolverId(),
 				  solver->getPublishCandidates(),
 				  solver->getConsumeCandidates());
+	}
+
+	/* Claims of the d workers in steal mode, one entry per block of every part. The size only depends on the
+	 * parameters and the formula, and the table exists on every rank as soon as one d worker exists anywhere, so that
+	 * the exchange of the global strategy stays matched */
+	const unsigned int parts = countPartitionWorkers(solvers);
+	if (parts > 0 && parts <= PartClaims::MAX_WORKERS) {
+		const size_t blockVars = CadiBackPartition::blockVariables(nbVars, __globalParameters__.backbonePartBlock);
+		auto claims =
+			std::make_shared<PartClaims>(CadiBackPartition::blocksPerPart(nbVars, parts, blockVars) * parts);
+		board->setClaims(claims);
+		for (auto solver : solvers)
+			if (auto partition = std::dynamic_pointer_cast<CadiBackPartition>(solver))
+				partition->setClaims(claims, blockVars);
 	}
 	return board;
 }

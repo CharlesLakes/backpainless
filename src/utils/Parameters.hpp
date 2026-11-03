@@ -69,6 +69,17 @@
 		  "bb-share-cand-local",                                                                                             \
 		  false,                                                                                                             \
 		  "With -dist, keep the board of decided variables inside each process instead of exchanging it across MPI ranks")   \
+	PARAM(backbonePartMode,                                                                                               \
+		  std::string,                                                                                                       \
+		  "bb-part-mode",                                                                                                    \
+		  "steal",                                                                                                           \
+		  "d workers, comma-separated list cycled over the solver ids: steal (only the blocks claimed, own part first, "     \
+		  "then blocks stolen from the end of the others) or walk (every part, own one first)")                              \
+	PARAM(backbonePartBlock,                                                                                              \
+		  int,                                                                                                               \
+		  "bb-part-block",                                                                                                   \
+		  0,                                                                                                                 \
+		  "Variables per block of the d workers in steal mode, the same for all (0 = ceil(sqrt(#variables)))")               \
 	/* NEW ORDER (5/6): add the name to this help and to DETAILED_HELP_BACKBONE below */                                \
 	PARAM(backboneOrder,                                                                                                  \
 		  std::string,                                                                                                       \
@@ -255,6 +266,12 @@ extern Parameters __globalParameters__;
 		 "    " BOLD "all" RESET " (default), " BOLD "backbone" RESET " (backbone literals only) or " BOLD "free" RESET   \
 		 " (free variables only)\n"                                                                                   \
 		 "  " YELLOW "-bb-share-cand-local" RESET ": With -dist, keep the board inside each process\n"                   \
+		 "  " YELLOW "-bb-part-mode" RESET ": d workers (one per worker, comma-separated)\n"                             \
+		 "    " BOLD "steal" RESET " (default): a worker only checks the blocks it claims, its own part from the front,\n" \
+		 "    then blocks of the other parts from their end; the rest comes from the board (needs -bb-share-cand=1)\n"   \
+		 "    " BOLD "walk" RESET ": every part, its own first (candidates of the others are checked again until the\n"   \
+		 "    board decides them)\n"                                                                                     \
+		 "  " YELLOW "-bb-part-block" RESET ": Variables per block in steal mode (0 = ceil(sqrt(#variables)))\n"         \
 		 "  " YELLOW "-bb-order" RESET ": Order of the initial candidates, one name per worker (comma-separated)\n"     \
 		 "    " BOLD "natural" RESET ": variable index (default)   " BOLD "reverse" RESET ": decreasing index\n"       \
 		 "    " BOLD "random" RESET ": shuffled with the solver seed\n"                                                \
