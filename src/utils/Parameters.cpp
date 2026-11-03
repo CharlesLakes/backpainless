@@ -140,6 +140,18 @@ Parameters::init(int argc, char** argv)
 		exit(PERR_ARGS_ERROR);
 	}
 
+	const std::string& modelMask = __globalParameters__.initialModelUse;
+	if (modelMask.empty() || modelMask.find_first_not_of("01") != std::string::npos) {
+		LOGERROR("Invalid -model-use=%s: expected a non empty mask of 0 and 1", modelMask.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
+	if (!__globalParameters__.enableDistributed && !__globalParameters__.initialModel.empty() &&
+		!std::filesystem::exists(__globalParameters__.initialModel)) {
+		LOGERROR("Error: model file '%s' not found", __globalParameters__.initialModel.c_str());
+		exit(PERR_ARGS_ERROR);
+	}
+
 	const std::string& candMask = __globalParameters__.backboneShareCandidates;
 	if (candMask.empty() || candMask.find_first_not_of("01pc") != std::string::npos) {
 		LOGERROR("Invalid -bb-share-cand=%s: expected a non empty mask of 0, 1, p and c", candMask.c_str());

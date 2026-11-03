@@ -32,6 +32,17 @@
 		  "Chunk rate K of the constraint, comma-separated list cycled over the solver ids (0 = all candidates, "            \
 		  "1 = one-by-one, 10 = cadiback --chunking)")                                                                       \
 	PARAM(backboneNoFlip, bool, "bb-no-flip", false, "Do not drop flippable literals from the backbone candidates")       \
+	PARAM(initialModel,                                                                                                   \
+		  std::string,                                                                                                       \
+		  "model",                                                                                                           \
+		  "",                                                                                                                \
+		  "File with a model of the formula ('v' lines of a SAT solver output, partial allowed): the first SAT call "        \
+		  "assumes it instead of searching a model")                                                                         \
+	PARAM(initialModelUse,                                                                                                \
+		  std::string,                                                                                                       \
+		  "model-use",                                                                                                       \
+		  "1",                                                                                                               \
+		  "Mask of 0/1 cycled over the solver ids: workers with 0 search their own first model even with -model")           \
 	PARAM(backboneShareUnits,                                                                                             \
 		  std::string,                                                                                                       \
 		  "bb-share-units",                                                                                                  \
@@ -230,6 +241,9 @@ extern Parameters __globalParameters__;
 		 "    " BOLD "K" RESET ": reset to 1 after a SAT answer, multiplied by K after an UNSAT answer\n"             \
 		 "    e.g. " YELLOW "-bb-chunk=0,10" RESET ": even ids use 0, odd ids use 10\n"                                  \
 		 "  " YELLOW "-bb-no-flip" RESET ": Do not use flippable literals to drop candidates\n"                       \
+		 "  " YELLOW "-model" RESET ": File with a model ('v' lines, partial allowed): the first SAT call assumes it\n"   \
+		 "    (checked: a model falsifying the formula is reported and the worker searches its own)\n"                 \
+		 "  " YELLOW "-model-use" RESET ": Mask of 0/1 per worker, 0 = search the first model anyway (default 1)\n"    \
 		 "  " YELLOW "-bb-share-learnt" RESET ": Mask of 0/1 per worker, 0 = do not export learnt clauses (default 1)\n" \
 		 "  " YELLOW "-bb-share-cand" RESET ": Board of decided variables (backbone or free), one mode per worker\n"   \
 		 "    " BOLD "0" RESET ": off (default)   " BOLD "1" RESET ": publish and consume\n"                            \

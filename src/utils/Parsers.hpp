@@ -149,6 +149,21 @@ bool
 parseCNF(const char* filename, Formula& formula, const std::vector<std::unique_ptr<ClauseProcessor>>& processors = {});
 
 /**
+ * @brief Parse a model (or a partial assignment) of a formula with @p varCount variables.
+ *
+ * Accepts the output of a SAT solver: 'v' lines of literals, optionally ended by 0; 'c' and 's' lines are ignored
+ * ("s UNSATISFIABLE" is an error). A file without 'v' lines may hold the literals directly. Literals out of range or
+ * assigned both ways are errors.
+ *
+ * @param filename The path to the file to parse.
+ * @param varCount Number of variables of the formula.
+ * @param model Literals of the model, by increasing variable.
+ * @return true if parsing was successful, false otherwise (the reason is logged).
+ */
+bool
+parseModel(const char* filename, unsigned int varCount, std::vector<int>& model);
+
+/**
  * @brief Parse the CNF parameters (variable count and clause count) from a file.
  *
  * @param f File pointer to parse from.
