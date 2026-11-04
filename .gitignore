@@ -139,3 +139,4 @@ solvers/cryptominisat/build/
 # Slurm benchmarks (scripts/slurm)
 runs/
 instances/
+models/

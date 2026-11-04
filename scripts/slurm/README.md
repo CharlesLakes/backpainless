@@ -133,6 +133,29 @@ python3 scripts/download_instances.py main         # the benchmark set for concl
 python3 scripts/download_instances.py all --max-time 600 --dry-run   # the 358 instances of the pool
 ```
 
+`recent` lists the 361 SAT instances of the main tracks of 2025 and 2026 according to GBD. Those competitions published
+no per-instance runtime, so neither the CaDiCaL time nor a model is known in advance:
+
+```bash
+python3 scripts/download_instances.py recent --dest instances/recent
+```
+
+### Precomputed models
+
+`scripts/slurm/models.sbatch` runs the sequential CaDiCaL once per instance (a job array, 1 CPU per task, no
+backpainless) and keeps the model of every SAT instance in `models/<list>/<hash>.model`, the format read by
+`-model`. Its `results.tsv` (status and CaDiCaL time of each instance) is the CaDiCaL time missing for `recent`.
+Neither the SAT Competitions nor GBD publish models, so this is the only way to get them.
+
+```bash
+INSTANCES=instances/recent bash scripts/slurm/models.sbatch             # plan
+INSTANCES=instances/recent bash scripts/slurm/models.sbatch --submit    # TIMEOUT=1800, MEM=3840M by default
+INSTANCES=instances/recent bash scripts/slurm/models.sbatch --summary   # sat / unsat / unknown, times
+```
+
+A resubmission only runs what has no answer yet (errors such as out of memory are retried: raise `MEM`;
+`RETRY_UNKNOWN=1` reruns the time limits). `MAX_PARALLEL=N` caps the tasks running at the same time.
+
 For a first test, a small instance with a non-empty backbone is the most useful: e.g. SATLIB `uf250-06.cnf` (backbone
 of 10 literals, a few seconds). `ais12.cnf` is a good speed test, but its backbone is empty (`b 0` only).
 
