@@ -96,10 +96,12 @@ if [[ -z ${SLURM_JOB_ID:-} ]]; then
 	cmd=(sbatch --job-name=bpl-models --partition="$PARTITION" --account="$ACCOUNT" --ntasks=1 --cpus-per-task="$CPUS"
 		--mem="$MEM" --time="$limit" --array="$array" --output="$OUT/slurm-%A_%a.out")
 	[[ -n $EXCLUDE ]] && cmd+=(--exclude="$EXCLUDE")
-	cmd+=(--export=ALL,INSTANCES="$INSTANCES",OUT="$OUT",TIMEOUT="$TIMEOUT",CADICAL="$CADICAL",TODO="$list" "$0")
-	echo "  ${cmd[*]}"
+	cmd+=("$0")
+	# the variables go through the environment of sbatch, as in bench.sbatch (no --export: on this cluster it left the
+	# tasks held with user_env_retrieval_failed)
+	echo "  INSTANCES=$INSTANCES OUT=$OUT TIMEOUT=$TIMEOUT CADICAL=$CADICAL TODO=$list ${cmd[*]}"
 	if [[ $mode == submit ]]; then
-		"${cmd[@]}"
+		INSTANCES=$INSTANCES OUT=$OUT TIMEOUT=$TIMEOUT CADICAL=$CADICAL TODO=$list "${cmd[@]}"
 	else
 		echo "nothing submitted: add --submit"
 	fi
