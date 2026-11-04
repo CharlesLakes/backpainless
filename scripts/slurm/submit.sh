@@ -19,6 +19,8 @@
 # SHARE=no-clauses|no-backbones|no-free|none runs the configurations sharing less (default all); the profile goes
 # into the name: SHARE=none bash scripts/slurm/submit.sh --submit cmxpd-16 -> runs/<campaign>/cmxpd+none-16.
 # D_MODE=walk runs the d workers in walk mode (default steal), also in the name: d+walk-16.
+# MODELS=models/<list> (scripts/slurm/models.sbatch) keeps only the instances CaDiCaL solved; USE_MODEL=1 also gives
+# each run its model as the first model of the workers (-model), in the name: cmx+model-16.
 #
 # Every variable of bench.sbatch (INSTANCES, REPS, TIMEOUT, CB_ORDERS, XOR_ROUNDS, ...) can be set in the environment,
 # the same for every configuration of the call. The jobs run at the same time as soon as Slurm has the CPUs; SERIAL=1
@@ -63,6 +65,7 @@ for c in "${configs[@]}"; do
 	# a sharing profile other than all goes into the name: cmxpd+no-free-16
 	label=$c
 	[[ ${D_MODE:-steal} == walk ]] && label=${label%-$n}+walk-$n
+	[[ ${USE_MODEL:-0} == 1 ]] && label=${label%-$n}+model-$n
 	[[ ${SHARE:-all} != all ]] && label=${label%-$n}+$SHARE-$n
 	EXPERIMENT=$exp WORKERS=$n LABEL=$label OUT=runs/$CAMPAIGN/$label bash "$here/bench.sbatch" "${submit[@]}" ||
 		failed+=("$label")

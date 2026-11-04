@@ -158,6 +158,20 @@ INSTANCES=instances/recent bash scripts/slurm/models.sbatch --summary   # sat / 
 A resubmission only runs what has no answer yet (errors such as out of memory are retried: raise `MEM`;
 `RETRY_UNKNOWN=1` reruns the time limits). `MAX_PARALLEL=N` caps the tasks running at the same time.
 
+The tasks use the nodes of the benchmarks: same `PARTITION`, `ACCOUNT` and `EXCLUDE` as `bench.sbatch`
+(`solver`, `node906,node907` excluded, so the 4-CPU nodes node910-927, two tasks per node).
+
+Then, in `submit.sh` / `bench.sbatch` (and so in `campaign.sh`), `MODELS=models/<list>` keeps only the instances
+CaDiCaL solved (those with a model), and `USE_MODEL=1` also gives each run its model as the first model of the workers
+(`-model`: its literals are the initial candidates), `+model` in the name:
+
+```bash
+MODELS=models/sc2026 INSTANCES=instances/sc2026 bash scripts/slurm/submit.sh --submit cmx-16              # cmx-16
+USE_MODEL=1 MODELS=models/sc2026 INSTANCES=instances/sc2026 bash scripts/slurm/submit.sh --submit cmx-16  # cmx+model-16
+```
+
+Submit them once `models.sbatch` is done: the runs are numbered over the instances kept.
+
 For a first test, a small instance with a non-empty backbone is the most useful: e.g. SATLIB `uf250-06.cnf` (backbone
 of 10 literals, a few seconds). `ais12.cnf` is a good speed test, but its backbone is empty (`b 0` only).
 

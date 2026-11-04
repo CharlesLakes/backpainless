@@ -90,7 +90,18 @@ steal) D_TAG= ;;
 walk) D_TAG=+walk ;;
 *) echo "invalid D_MODE=$D_MODE: expected steal or walk" >&2; exit 1 ;;
 esac
-LABEL=${LABEL:-$EXPERIMENT$D_TAG$SHARE_TAG-$WORKERS} # name of the experiment in the results
+# Precomputed models (scripts/slurm/models.sbatch): MODELS=<its output directory> keeps only the instances it solved
+# (those with a <hash>.model); USE_MODEL=1 also gives every run its model as the first model of the workers (-model, the
+# candidates without the first SAT call), +model in the name. Run it once models.sbatch is done: the tasks are numbered
+# over the instances kept, so a MODELS directory that grows between two submissions mixes them up.
+MODELS=${MODELS:-}
+USE_MODEL=${USE_MODEL:-0}
+case $USE_MODEL in
+0) MODEL_TAG= ;;
+1) MODEL_TAG=+model; [[ -n $MODELS ]] || { echo "USE_MODEL=1 needs MODELS=<directory of models.sbatch>" >&2; exit 1; } ;;
+*) echo "invalid USE_MODEL=$USE_MODEL: expected 0 or 1" >&2; exit 1 ;;
+esac
+LABEL=${LABEL:-$EXPERIMENT$D_TAG$MODEL_TAG$SHARE_TAG-$WORKERS} # name of the experiment in the results
 SERIAL=${SERIAL:-0}                         # 1: --dependency=singleton, jobs of the same JOB_NAME run one at a time
 JOB_NAME=${JOB_NAME:-backpainless}
 EXTRA_ARGS=${EXTRA_ARGS:-}                  # added to every run, e.g. "-bb-share-cand-local"
@@ -195,6 +206,16 @@ worker_table() {
 
 mapfile -t files < <(find "$INSTANCES" -type f \( -name '*.cnf' -o -name '*.cnf.xz' -o -name '*.cnf.gz' \
 	-o -name '*.cnf.bz2' \) | sort)
+if [[ -n $MODELS ]]; then
+	[[ -d $MODELS ]] || { echo "no directory MODELS=$MODELS" >&2; exit 1; }
+	kept=()
+	for f in "${files[@]}"; do
+		b=$(basename "$f")
+		[[ -f $MODELS/${b%%-*}.model ]] && kept+=("$f")
+	done
+	echo "MODELS=$MODELS: ${#kept[@]} of ${#files[@]} instances solved by CaDiCaL" >&2
+	files=("${kept[@]}")
+fi
 ((${#files[@]})) || { echo "no instance in $INSTANCES" >&2; exit 1; }
 total=$((REPS * ${#files[@]}))
 build_worker_args
@@ -279,7 +300,7 @@ deadline=$((SECONDS + (left >= 0 ? left : 1 << 30)))
 worker_table >"$OUT/workers.tsv"
 {
 	for v in EXPERIMENT LABEL MIX WORKERS CPUS MEM_PER_WORKER MEM_PER_CPU EXCLUDE INSTANCES REPS TIMEOUT GSHR BINARY NATIVE CB_ORDERS CB_CHUNKS XOR_MS \
-		XOR_DENSITIES XOR_ROUNDS PRE_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS D_ORDER D_MODE SHARE EXTRA_ARGS total; do
+		XOR_DENSITIES XOR_ROUNDS PRE_ROUNDS XOR_PATIENCE PRE_PATIENCE XOR_CONFL MAXSAT_ROUNDS D_ORDER D_MODE MODELS USE_MODEL SHARE EXTRA_ARGS total; do
 		printf '%s=%q\n' "$v" "${!v}"
 	done
 } >"$OUT/config.env"
@@ -389,7 +410,12 @@ for ((task = 0; task < total; task++)); do
 	rankdir=$OUT/ranks/$task
 	launch=("${launcher[@]}")
 	[[ ${launcher[0]##*/} == mpirun ]] && launch+=(--output-filename "$rankdir")
-	cmd=("${launch[@]}" "${program[@]}" "$input" "${WORKER_ARGS[@]}" "${extra[@]}" "-t=$TIMEOUT")
+	model=()
+	if ((USE_MODEL)); then
+		b=$(basename "$inst")
+		model=("-model=$MODELS/${b%%-*}.model")
+	fi
+	cmd=("${launch[@]}" "${program[@]}" "$input" "${WORKER_ARGS[@]}" "${model[@]}" "${extra[@]}" "-t=$TIMEOUT")
 	echo "c task $task: ${cmd[*]}" >"$log"
 	# stack limit of the job: the default stack of a thread follows it (2 MB when unlimited)
 	echo "c ulimit -s: $(ulimit -s)" >>"$log"
