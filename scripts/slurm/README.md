@@ -142,14 +142,15 @@ python3 scripts/download_instances.py recent --dest instances/recent
 
 ### Precomputed models
 
-`scripts/slurm/models.sbatch` runs the sequential CaDiCaL once per instance (a job array, 1 CPU per task, no
-backpainless) and keeps the model of every SAT instance in `models/<list>/<hash>.model`, the format read by
-`-model`. Its `results.tsv` (status and CaDiCaL time of each instance) is the CaDiCaL time missing for `recent`.
-Neither the SAT Competitions nor GBD publish models, so this is the only way to get them.
+`scripts/slurm/models.sbatch` runs the sequential CaDiCaL once per instance (a job array, no backpainless; each task 2
+CPUs and 7680M, two per 4-CPU node, `CPUS` and `MEM` to change it) and keeps the model of every SAT instance in
+`models/<list>/<hash>.model`, the format read by `-model`. Its `results.tsv` (status and CaDiCaL time of each instance)
+is the CaDiCaL time missing for `recent`. Neither the SAT Competitions nor GBD publish models, so this is the only way
+to get them.
 
 ```bash
 INSTANCES=instances/recent bash scripts/slurm/models.sbatch             # plan
-INSTANCES=instances/recent bash scripts/slurm/models.sbatch --submit    # TIMEOUT=1800, MEM=3840M by default
+INSTANCES=instances/recent bash scripts/slurm/models.sbatch --submit    # TIMEOUT=1800, CPUS=2, MEM=7680M by default
 INSTANCES=instances/recent bash scripts/slurm/models.sbatch --summary   # sat / unsat / unknown, times
 ```
 
