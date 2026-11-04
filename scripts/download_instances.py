@@ -8,6 +8,7 @@ Usage:
     python3 scripts/download_instances.py all --limit 30    # 30 instances that CaDiCaL solves fastest
     python3 scripts/download_instances.py --select          # rebuild main and all from the competition data
     python3 scripts/download_instances.py --select-recent   # rebuild recent from the GBD metadata
+    python3 scripts/download_instances.py recent --year 2026 --dest instances/sc2026   # one competition only
 
 The lists live in scripts/benchmarks/ (one instance per line, the GBD hash in the first column):
     example.tsv           (example) 20 instances for quick runs and first tests of a configuration
@@ -217,6 +218,7 @@ def main():
     parser.add_argument("--dest", default=os.path.join(ROOT, "instances"), help="directory (default: instances/)")
     parser.add_argument("--limit", type=int, help="only the N instances of main or all that CaDiCaL solves fastest")
     parser.add_argument("--max-time", type=float, help="only instances that CaDiCaL solves within this time (s)")
+    parser.add_argument("--year", type=int, nargs="+", help="only the instances of these competitions")
     parser.add_argument("--dry-run", action="store_true", help="print the instances without downloading them")
     parser.add_argument("-j", "--jobs", type=int, default=4, help="parallel downloads (default: 4)")
     parser.add_argument("--select", action="store_true",
@@ -255,6 +257,8 @@ def main():
             part = part[:opts.limit] if opts.limit is not None else part
         rows += part
     rows = list({r["hash"]: r for r in rows}.values())
+    if opts.year:
+        rows = [r for r in rows if r.get("year") and int(r["year"]) in opts.year]
 
     os.makedirs(opts.dest, exist_ok=True)
     failed = 0

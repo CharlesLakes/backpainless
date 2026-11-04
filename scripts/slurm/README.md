@@ -138,6 +138,7 @@ no per-instance runtime, so neither the CaDiCaL time nor a model is known in adv
 
 ```bash
 python3 scripts/download_instances.py recent --dest instances/recent
+python3 scripts/download_instances.py recent --year 2026 --dest instances/sc2026   # one competition only
 ```
 
 ### Precomputed models
