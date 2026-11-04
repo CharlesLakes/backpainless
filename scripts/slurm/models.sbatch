@@ -1,6 +1,7 @@
 #!/bin/bash
 # Precomputes one model per instance with the sequential CaDiCaL (solvers/cadical/build/cadical, no backpainless): a
-# Slurm job array, one task of 1 CPU per instance, each a single CaDiCaL run with a time limit. It also measures the
+# Slurm job array, one task per instance (2 CPUs and half the memory of a 4-CPU node by default, so two tasks per
+# node, each with room for large instances), each a single CaDiCaL run with a time limit. It also measures the
 # CaDiCaL time of the instances whose competition published no runtime (the recent list of download_instances.py).
 #
 # Output in OUT (default models/<name of INSTANCES>):
@@ -19,7 +20,7 @@
 #SBATCH --partition=solver
 #SBATCH --account=solver
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=2
 
 set -euo pipefail
 export LC_ALL=C
@@ -28,7 +29,8 @@ INSTANCES=${INSTANCES:-instances/recent}        # directory with *.cnf / *.cnf.x
 OUT=${OUT:-models/$(basename "$INSTANCES")}
 TIMEOUT=${TIMEOUT:-1800}                        # -t of CaDiCaL, seconds (killed 60 s after it)
 CADICAL=${CADICAL:-solvers/cadical/build/cadical}
-MEM=${MEM:-3840M}                               # memory of each task (--mem)
+CPUS=${CPUS:-2}                                 # CPUs of each task (CaDiCaL uses one; the CPUs reserve the memory)
+MEM=${MEM:-7680M}                               # memory of each task (--mem): 15 GB / 2
 MAX_PARALLEL=${MAX_PARALLEL:-}                  # at most this many tasks at the same time (empty: no limit)
 EXCLUDE=${EXCLUDE-node906,node907}              # --exclude (empty: none)
 PARTITION=${PARTITION:-solver}
@@ -83,7 +85,7 @@ if [[ -z ${SLURM_JOB_ID:-} ]]; then
 		[[ -n ${done[$(hash_of "$f")]:-} ]] || echo "$f" >>"$todo"
 	done < <(find "$INSTANCES" -maxdepth 1 \( -name '*.cnf' -o -name '*.cnf.xz' -o -name '*.cnf.gz' -o -name '*.cnf.bz2' \) | sort)
 	n=$(wc -l <"$todo")
-	echo "$total instances in $INSTANCES, $n to do, results in $OUT (TIMEOUT=$TIMEOUT s, MEM=$MEM)"
+	echo "$total instances in $INSTANCES, $n to do, results in $OUT (TIMEOUT=$TIMEOUT s, $CPUS CPUs and $MEM per task)"
 	((n)) || exit 0
 
 	# the array reads its own copy: a later plan rewrites todo.txt
@@ -91,7 +93,7 @@ if [[ -z ${SLURM_JOB_ID:-} ]]; then
 	[[ $mode == submit ]] && list=$todo.$(date +%Y%m%d-%H%M%S) && cp "$todo" "$list"
 	limit=$(((TIMEOUT + 120 + 59) / 60))
 	array="0-$((n - 1))${MAX_PARALLEL:+%$MAX_PARALLEL}"
-	cmd=(sbatch --job-name=bpl-models --partition="$PARTITION" --account="$ACCOUNT" --ntasks=1 --cpus-per-task=1
+	cmd=(sbatch --job-name=bpl-models --partition="$PARTITION" --account="$ACCOUNT" --ntasks=1 --cpus-per-task="$CPUS"
 		--mem="$MEM" --time="$limit" --array="$array" --output="$OUT/slurm-%A_%a.out")
 	[[ -n $EXCLUDE ]] && cmd+=(--exclude="$EXCLUDE")
 	cmd+=(--export=ALL,INSTANCES="$INSTANCES",OUT="$OUT",TIMEOUT="$TIMEOUT",CADICAL="$CADICAL",TODO="$list" "$0")
