@@ -32,6 +32,8 @@
 
 set -euo pipefail
 export LC_ALL=C
+# a failure stopped by set -e prints nothing by itself: say where (srun only shows the exit code)
+trap 'rc=$?; echo "build_native.sh on $(hostname -s): line $LINENO failed (exit $rc): $BASH_COMMAND" >&2' ERR
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BIN=$ROOT/bin
@@ -187,7 +189,7 @@ if [[ -x $dest/backpainless && $FORCE == 0 ]]; then
 	exit 0
 fi
 
-march=$(gcc -march=native -Q --help=target 2>/dev/null | awk '$1 == "-march=" { print $2; exit }')
+march=$({ gcc -march=native -Q --help=target 2>/dev/null || true; } | awk '$1 == "-march=" { print $2 }' | head -1)
 jobs=$(nproc)
 echo "$node: building for $(grep -m1 '^model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//') (-march=native = ${march:-?})," \
 	"processor $key, $jobs jobs, in $TMP"
