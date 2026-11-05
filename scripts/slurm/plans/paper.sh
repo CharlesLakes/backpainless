@@ -1,5 +1,7 @@
 # Plan of the final benchmark of the paper (run with scripts/slurm/campaign.sh): the 6 best portfolios of estudios 4
-# and 5 on the 100 instances of the main list, phases in order of priority:
+# and 5 on the 100 instances of the paper list (python3 scripts/download_instances.py paper --dest instances/paper:
+# the 85 SAT instances of 2026 and 15 of 2025 that CaDiCaL solves in at most 1800 s, 25 per time range), phases in
+# order of priority:
 #   best        cmxpd cmx cmxp mxp mx cmp, 16 workers
 #   partition   d s c cd, 16 workers (cmxpd vs cmxp from best), and d cd with D_MODE=walk (d+walk-16, cd+walk-16):
 #               the d workers re-check the parts of the others instead of claiming blocks
@@ -11,11 +13,10 @@
 #
 #   bash scripts/slurm/campaign.sh scripts/slurm/plans/paper.sh --submit best partition
 #   bash scripts/slurm/collect.sh runs/paper
-# CAMPAIGN, INSTANCES and TIMEOUT can be changed in the environment (CAMPAIGN=estudio6 resumes runs made under the old
-# name of this plan).
+# CAMPAIGN, INSTANCES and TIMEOUT can be changed in the environment.
 
 export CAMPAIGN=${CAMPAIGN:-paper}
-export INSTANCES=${INSTANCES:-instances/main}
+export INSTANCES=${INSTANCES:-instances/paper}
 export TIMEOUT=${TIMEOUT:-3600}
 
 BEST=(cmxpd cmx cmxp mxp mx cmp)

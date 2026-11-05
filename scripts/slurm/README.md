@@ -147,6 +147,7 @@ the release asset `models-recent-v1`; `--models` downloads them into `models/rec
 `results.tsv` of every run, unknown ones included):
 
 ```bash
+python3 scripts/download_instances.py paper --models --dest instances/paper              # the set of the paper
 python3 scripts/download_instances.py solved --models --dest instances/solved
 python3 scripts/download_instances.py solved --year 2026 --models --dest instances/sc2026   # 2026 only
 MODELS=models/recent INSTANCES=instances/solved bash scripts/slurm/submit.sh cmx-16           # plan
@@ -362,8 +363,8 @@ several phases is submitted once, and a resubmission only runs what is missing. 
 anything is submitted.
 
 `scripts/slurm/plans/paper.sh` is the final benchmark of the paper: the 6 best portfolios of estudios 4 and 5 (cmxpd,
-cmx, cmxp, mxp, mx, cmp) on the `main` list, all in `runs/paper` (`TIMEOUT=3600`; `CAMPAIGN=estudio6` resumes runs
-made under its former name, `studies/estudio6.sh`):
+cmx, cmxp, mxp, mx, cmp) on the `paper` list (the 85 solved instances of 2026 and 15 of 2025, 25 per CaDiCaL time
+range), all in `runs/paper` (`TIMEOUT=3600`):
 
 | Phase | Question | Configurations |
 |---|---|---|
@@ -374,7 +375,7 @@ made under its former name, `studies/estudio6.sh`):
 | `scaling-8`, `scaling-4` | more workers | `best`, `partition` and `diversity` with 8 and with 4 workers |
 
 ```bash
-python3 scripts/download_instances.py main --dest instances/main
+python3 scripts/download_instances.py paper --dest instances/paper
 bash scripts/slurm/build_native.sh --slurm --force
 bash scripts/slurm/campaign.sh scripts/slurm/plans/paper.sh                           # plan of every phase
 bash scripts/slurm/campaign.sh scripts/slurm/plans/paper.sh --submit best partition   # these phases

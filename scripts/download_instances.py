@@ -11,6 +11,8 @@ Usage:
     python3 scripts/download_instances.py recent --year 2026 --dest instances/sc2026   # one competition only
     python3 scripts/download_instances.py solved --models   # the recent instances CaDiCaL solved, and their models
     python3 scripts/download_instances.py --select-solved models/sc2026/results.tsv models/sc2025/results.tsv
+    python3 scripts/download_instances.py --select-paper    # rebuild paper from solved
+    python3 scripts/download_instances.py paper --models --dest instances/paper   # the set of the paper
 
 The lists live in scripts/benchmarks/ (one instance per line, the GBD hash in the first column):
     example.tsv           (example) 20 instances for quick runs and first tests of a configuration
@@ -20,6 +22,9 @@ The lists live in scripts/benchmarks/ (one instance per line, the GBD hash in th
                           published: the CaDiCaL time is measured with scripts/slurm/models.sbatch)
     sc-recent-solved.tsv  (solved) those of recent that CaDiCaL solved (SAT) in at most 1800 s with
                           scripts/slurm/models.sbatch, with the measured time; --models downloads their models
+    sc-paper-100.tsv      (paper) the benchmark set of the paper: every solved instance of 2026 (85), completed to 100
+                          with solved instances of 2025, picked like main (fewest picks in the CaDiCaL time range,
+                          then in the family, counting the 2026 ones)
     sc-cadical-100.tsv    (main) 100 of them, not in example.tsv, spread over the families, the years and the CaDiCaL
                           times (as many in each of 0-10, 10-60, 60-300 and 300-1800 s): the benchmark set the
                           conclusions are drawn from
@@ -46,7 +51,7 @@ LISTS = os.path.join(ROOT, "scripts", "benchmarks")
 GBD_FILE = "https://benchmark-database.de/file/{}"
 GBD_META = "https://benchmark-database.de/getdatabase/meta"
 LIST_FILES = {"example": "example", "main": "sc-cadical-100", "all": "sc-cadical-1800", "recent": "sc-recent-sat",
-              "solved": "sc-recent-solved"}
+              "solved": "sc-recent-solved", "paper": "sc-paper-100"}
 RECENT_TRACKS = {"main_2026": 2026, "main_2025": 2025}
 # Models of the solved list (models.sbatch, CaDiCaL 1.9.1, 1800 s): too large for git, kept as a release asset with
 # one <hash>.model per instance under models/recent/
@@ -136,6 +141,25 @@ def select_solved(results_files):
     if missing:
         print(f"warning: {missing} instances of recent have no run in {', '.join(results_files)}", file=sys.stderr)
     return sorted(rows, key=lambda r: (-int(r["year"]), float(r["cadical_seconds"])))
+
+
+def select_paper(count, first_year):
+    """Every solved instance of first_year, then the others picked by spread, counting the ones already in."""
+    solved = read_list("solved")
+    picked = [r for r in solved if int(r["year"]) == first_year]
+    left = [r for r in solved if int(r["year"]) != first_year]
+    per_bucket, per_family = {}, {}
+    for r in picked:
+        per_bucket[bucket(r)] = per_bucket.get(bucket(r), 0) + 1
+        per_family[r["family"]] = per_family.get(r["family"], 0) + 1
+    while left and len(picked) < count:
+        b = min({bucket(r) for r in left}, key=lambda b: (per_bucket.get(b, 0), b))
+        r = min((r for r in left if bucket(r) == b), key=lambda r: (per_family.get(r["family"], 0), r["hash"]))
+        left.remove(r)
+        picked.append(r)
+        per_bucket[b] = per_bucket.get(b, 0) + 1
+        per_family[r["family"]] = per_family.get(r["family"], 0) + 1
+    return sorted(picked, key=lambda r: (-int(r["year"]), float(r["cadical_seconds"])))
 
 
 def download_models(dest, dry_run):
@@ -276,8 +300,10 @@ def main():
                         help="rebuild the recent list of scripts/benchmarks/ from the GBD metadata and exit")
     parser.add_argument("--select-solved", nargs="+", metavar="RESULTS",
                         help="rebuild the solved list from results.tsv files of models.sbatch and exit")
+    parser.add_argument("--select-paper", action="store_true",
+                        help="rebuild the paper list from the solved list (all of 2026, then 2025) and exit")
     parser.add_argument("--models", action="store_true",
-                        help="also download the precomputed models of the solved list (into models/recent/)")
+                        help="also download the precomputed models of the solved and paper lists (into models/recent/)")
     parser.add_argument("--models-dest", default=MODELS_DIR, help="directory of --models (default: models/)")
     parser.add_argument("--select-count", type=int, default=100, help="size of the main list (default: 100)")
     parser.add_argument("--select-time", type=float, default=1800, help="time limit of --select (default: 1800 s)")
@@ -302,6 +328,13 @@ def main():
         print(f"written {os.path.relpath(path, ROOT)} ({len(rows)} instances)", file=sys.stderr)
         return 0
 
+    if opts.select_paper:
+        rows = select_paper(opts.select_count, max(RECENT_TRACKS.values()))
+        path = os.path.join(LISTS, LIST_FILES["paper"] + ".tsv")
+        write_list(path, rows)
+        print(f"written {os.path.relpath(path, ROOT)} ({len(rows)} instances)", file=sys.stderr)
+        return 0
+
     if opts.select_solved:
         rows = select_solved(opts.select_solved)
         path = os.path.join(LISTS, LIST_FILES["solved"] + ".tsv")
@@ -312,7 +345,7 @@ def main():
     rows = []
     for name in dict.fromkeys(opts.lists or ["example", "main"]):
         part = read_list(LIST_FILES[name])
-        if name not in ("example", "recent", "solved"):
+        if name not in ("example", "recent", "solved", "paper"):
             if opts.max_time is not None:
                 part = [r for r in part if float(r["cadical_seconds"]) <= opts.max_time]
             part = part[:opts.limit] if opts.limit is not None else part
