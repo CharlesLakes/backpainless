@@ -9,6 +9,8 @@ Usage:
     python3 scripts/download_instances.py --select          # rebuild main and all from the competition data
     python3 scripts/download_instances.py --select-recent   # rebuild recent from the GBD metadata
     python3 scripts/download_instances.py recent --year 2026 --dest instances/sc2026   # one competition only
+    python3 scripts/download_instances.py solved --models   # the recent instances CaDiCaL solved, and their models
+    python3 scripts/download_instances.py --select-solved models/sc2026/results.tsv models/sc2025/results.tsv
 
 The lists live in scripts/benchmarks/ (one instance per line, the GBD hash in the first column):
     example.tsv           (example) 20 instances for quick runs and first tests of a configuration
@@ -16,6 +18,8 @@ The lists live in scripts/benchmarks/ (one instance per line, the GBD hash in th
                           at most 1800 s, with a verified result (SAT only by default: an UNSAT formula has no backbone)
     sc-recent-sat.tsv     (recent) the SAT instances of the main track of 2025 and 2026 according to GBD (no runtime
                           published: the CaDiCaL time is measured with scripts/slurm/models.sbatch)
+    sc-recent-solved.tsv  (solved) those of recent that CaDiCaL solved (SAT) in at most 1800 s with
+                          scripts/slurm/models.sbatch, with the measured time; --models downloads their models
     sc-cadical-100.tsv    (main) 100 of them, not in example.tsv, spread over the families, the years and the CaDiCaL
                           times (as many in each of 0-10, 10-60, 60-300 and 300-1800 s): the benchmark set the
                           conclusions are drawn from
@@ -41,8 +45,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LISTS = os.path.join(ROOT, "scripts", "benchmarks")
 GBD_FILE = "https://benchmark-database.de/file/{}"
 GBD_META = "https://benchmark-database.de/getdatabase/meta"
-LIST_FILES = {"example": "example", "main": "sc-cadical-100", "all": "sc-cadical-1800", "recent": "sc-recent-sat"}
+LIST_FILES = {"example": "example", "main": "sc-cadical-100", "all": "sc-cadical-1800", "recent": "sc-recent-sat",
+              "solved": "sc-recent-solved"}
 RECENT_TRACKS = {"main_2026": 2026, "main_2025": 2025}
+# Models of the solved list (models.sbatch, CaDiCaL 1.9.1, 1800 s): too large for git, kept as a release asset with
+# one <hash>.model per instance under models/recent/
+MODELS_URL = "https://github.com/CharlesLakes/backpainless/releases/download/models-recent-v1/models-recent.tar.xz"
+MODELS_DIR = os.path.join(ROOT, "models")
 TIME_BUCKETS = [10, 60, 300]
 
 # Per competition: detailed results of the main track (hash x solver -> seconds, 10000 = timeout), the CaDiCaL column,
@@ -109,6 +118,46 @@ def select_recent():
             chosen[h] = {"hash": h, "file": f"{h}-{name}", "year": RECENT_TRACKS[track], "family": family,
                          "result": result, "cadical_seconds": ""}
     return list(chosen.values())
+
+
+def select_solved(results_files):
+    """Instances of recent whose last models.sbatch run is sat, with the measured CaDiCaL time."""
+    last = {}
+    for path in results_files:
+        with open(path) as f:
+            for r in csv.DictReader(f, delimiter="\t"):
+                last[r["hash"]] = r
+    rows = []
+    for r in read_list("recent"):
+        run = last.get(r["hash"])
+        if run and run["status"] == "sat":
+            rows.append({**r, "cadical_seconds": f"{float(run['seconds']):.1f}"})
+    missing = sum(1 for r in read_list("recent") if r["hash"] not in last)
+    if missing:
+        print(f"warning: {missing} instances of recent have no run in {', '.join(results_files)}", file=sys.stderr)
+    return sorted(rows, key=lambda r: (-int(r["year"]), float(r["cadical_seconds"])))
+
+
+def download_models(dest, dry_run):
+    """Extracts the release asset of the models into dest (models/recent/<hash>.model)."""
+    if dry_run:
+        print(f"would download {MODELS_URL} into {dest}", file=sys.stderr)
+        return
+    import tarfile
+    os.makedirs(dest, exist_ok=True)
+    req = urllib.request.Request(MODELS_URL, headers={"User-Agent": "backpainless-download"})
+    with tempfile.TemporaryFile() as tmp:
+        with urllib.request.urlopen(req, timeout=600) as r:
+            while chunk := r.read(1 << 20):
+                tmp.write(chunk)
+        tmp.seek(0)
+        with tarfile.open(fileobj=tmp, mode="r:xz") as tar:
+            members = [m for m in tar.getmembers() if m.isfile() and m.name.startswith("models/")
+                       and ".." not in m.name.split("/")]
+            for m in members:
+                m.name = m.name[len("models/"):]
+            tar.extractall(dest, members=members)
+    print(f"{len(members)} files of the models in {dest}", file=sys.stderr)
 
 
 def gbd_families():
@@ -225,6 +274,11 @@ def main():
                         help="rebuild the main and all lists of scripts/benchmarks/ from the competition results and exit")
     parser.add_argument("--select-recent", action="store_true",
                         help="rebuild the recent list of scripts/benchmarks/ from the GBD metadata and exit")
+    parser.add_argument("--select-solved", nargs="+", metavar="RESULTS",
+                        help="rebuild the solved list from results.tsv files of models.sbatch and exit")
+    parser.add_argument("--models", action="store_true",
+                        help="also download the precomputed models of the solved list (into models/recent/)")
+    parser.add_argument("--models-dest", default=MODELS_DIR, help="directory of --models (default: models/)")
     parser.add_argument("--select-count", type=int, default=100, help="size of the main list (default: 100)")
     parser.add_argument("--select-time", type=float, default=1800, help="time limit of --select (default: 1800 s)")
     parser.add_argument("--select-unsat", action="store_true", help="--select also keeps UNSAT instances")
@@ -248,10 +302,17 @@ def main():
         print(f"written {os.path.relpath(path, ROOT)} ({len(rows)} instances)", file=sys.stderr)
         return 0
 
+    if opts.select_solved:
+        rows = select_solved(opts.select_solved)
+        path = os.path.join(LISTS, LIST_FILES["solved"] + ".tsv")
+        write_list(path, rows)
+        print(f"written {os.path.relpath(path, ROOT)} ({len(rows)} instances)", file=sys.stderr)
+        return 0
+
     rows = []
     for name in dict.fromkeys(opts.lists or ["example", "main"]):
         part = read_list(LIST_FILES[name])
-        if name not in ("example", "recent"):
+        if name not in ("example", "recent", "solved"):
             if opts.max_time is not None:
                 part = [r for r in part if float(r["cadical_seconds"]) <= opts.max_time]
             part = part[:opts.limit] if opts.limit is not None else part
@@ -259,6 +320,9 @@ def main():
     rows = list({r["hash"]: r for r in rows}.values())
     if opts.year:
         rows = [r for r in rows if r.get("year") and int(r["year"]) in opts.year]
+
+    if opts.models:
+        download_models(opts.models_dest, opts.dry_run)
 
     os.makedirs(opts.dest, exist_ok=True)
     failed = 0

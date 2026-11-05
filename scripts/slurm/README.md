@@ -141,6 +141,17 @@ python3 scripts/download_instances.py recent --dest instances/recent
 python3 scripts/download_instances.py recent --year 2026 --dest instances/sc2026   # one competition only
 ```
 
+`solved` lists the 212 of them (85 of 2026, 127 of 2025) that CaDiCaL solved in at most 1800 s with
+`models.sbatch`, with the measured time. Their models are too large for git (1.8 GB, ~200 MB compressed) and are kept as
+the release asset `models-recent-v1`; `--models` downloads them into `models/recent/<hash>.model` (with the
+`results.tsv` of every run, unknown ones included):
+
+```bash
+python3 scripts/download_instances.py solved --models --dest instances/solved
+python3 scripts/download_instances.py solved --year 2026 --models --dest instances/sc2026   # 2026 only
+MODELS=models/recent INSTANCES=instances/solved bash scripts/slurm/submit.sh cmx-16           # plan
+```
+
 ### Precomputed models
 
 `scripts/slurm/models.sbatch` runs the sequential CaDiCaL once per instance (a job array, no backpainless; each task 2
