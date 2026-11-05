@@ -13,7 +13,7 @@
 #   bash scripts/slurm/build_native.sh --slurm             # every node of PARTITION (one srun per node, one build per
 #                                                          # processor type, the other nodes only get their link)
 #   bash scripts/slurm/build_native.sh --slurm node910 node911   # these nodes only
-#   srun -p solver -A solver -w node910 -c 8 bash scripts/slurm/build_native.sh   # the node of the srun
+#   srun -p solver -A solver -w node910 -c 4 bash scripts/slurm/build_native.sh   # the node of the srun
 #   bash scripts/slurm/build_native.sh                     # this machine
 #   bash scripts/slurm/build_native.sh --list              # binaries and nodes already built
 #
@@ -27,7 +27,7 @@
 #   --env <file>            file sourced before the build (e.g. module load gcc openmpi), after the paths above
 #   --no-deps               no export at all: the environment of the shell as it is
 # The same through the environment: DEPS, BOOST_DIR, ZLIB_DIR, ENV_FILE. With --slurm: PARTITION, ACCOUNT, EXCLUDE
-# (same defaults as bench.sbatch), BUILD_CPUS (8), BUILD_TIME (minutes, 60), IMMEDIATE (seconds to wait for a busy
+# (same defaults as bench.sbatch), BUILD_CPUS (default: all the CPUs of each node), BUILD_TIME (minutes, 60), IMMEDIATE (seconds to wait for a busy
 # node, 120).
 
 set -euo pipefail
@@ -46,7 +46,7 @@ MODE=build
 PARTITION=${PARTITION:-solver}
 ACCOUNT=${ACCOUNT:-solver}
 EXCLUDE=${EXCLUDE-node906,node907}
-BUILD_CPUS=${BUILD_CPUS:-8}
+BUILD_CPUS=${BUILD_CPUS:-} # empty: the CPUs of each node (sinfo), a larger -c is refused by srun
 BUILD_TIME=${BUILD_TIME:-60}
 IMMEDIATE=${IMMEDIATE:-120}
 
@@ -112,8 +112,9 @@ if [[ $MODE == slurm ]]; then
 	echo "${#nodes[@]} nodes of $PARTITION: ${nodes[*]}"
 	failed=()
 	for n in "${nodes[@]}"; do
-		echo "== $n"
-		srun -p "$PARTITION" -A "$ACCOUNT" -w "$n" -N1 -n1 -c "$BUILD_CPUS" --time="$BUILD_TIME" \
+		cpus=${BUILD_CPUS:-$(sinfo -h -N -n "$n" -p "$PARTITION" -o '%c' | head -1)}
+		echo "== $n ($cpus CPUs)"
+		srun -p "$PARTITION" -A "$ACCOUNT" -w "$n" -N1 -n1 -c "${cpus:-1}" --time="$BUILD_TIME" \
 			--immediate="$IMMEDIATE" --job-name=bpl-build bash "$0" "${pass[@]}" || failed+=("$n")
 	done
 	echo
