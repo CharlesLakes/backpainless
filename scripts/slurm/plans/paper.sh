@@ -1,27 +1,33 @@
-# Plan of the final benchmark of the paper (run with scripts/slurm/campaign.sh): the 6 best portfolios of estudios 4
-# and 5 on the 100 instances of the paper list (python3 scripts/download_instances.py paper --dest instances/paper:
-# the 85 SAT instances of 2026 and 15 of 2025 that CaDiCaL solves in at most 1800 s, 25 per time range), phases in
-# order of priority:
-#   best        cmxpd cmx cmxp mxp mx cmp, 16 workers
-#   partition   d s c cd, 16 workers (cmxpd vs cmxp from best), and d cd with D_MODE=walk (d+walk-16, cd+walk-16):
-#               the d workers re-check the parts of the others instead of claiming blocks
-#   sharing     the 6 best with SHARE = no-clauses, no-backbones, no-free, none (best is SHARE=all)
-#   diversity   m x p, 16 workers (one type per portfolio; c, d, s in partition)
-#   scaling-8   best, partition (steal) and diversity with 8 workers
-#   scaling-4   the same with 4 workers
-# With 4 workers cmxpd cycles c, m, x, p (no d), with 8 it has a single d (one part): the effect of d is read at 16.
+# Plan of the final benchmark of the paper (run with scripts/slurm/campaign.sh): backbone search on the 100 instances
+# of the paper list (the 85 SAT instances of 2026 and 15 of 2025 that CaDiCaL solves in at most 1800 s, 25 per time
+# range), every worker starting from the precomputed CaDiCaL model of the instance (USE_MODEL=1, -model): the first
+# SAT call is skipped, what is measured is the search of the backbone.
 #
-#   bash scripts/slurm/campaign.sh scripts/slurm/plans/paper.sh --submit best partition
+# Worker types: c CadiBack, s CadiBack block by block (each worker alone), d partition of the variables among the d
+# workers (blocks claimed and stolen), m MaxSAT, x XOR on CryptoMiniSat, p XOR on CaDiCaL then CadiBack.
+# Phases in order of priority, every parallel one with 4, 8 and 16 workers:
+#   sequential  every solver alone with 1 worker: c s m x p (d with one worker is s with a single part)
+#   solo        every solver alone: c s d m x p
+#   best        the 4 best mixes of estudios 4 and 5: cmxpd cmx cmxp mxp (cmxpd vs cmxp: the partition)
+#   sharing     the same 4 with SHARE=none (nothing shared) against best (everything shared)
+# With 4 workers cmxpd cycles c, m, x, p, the same as cmxp: cmxpd-4 is left out. With 8 it has a single d.
+#
+#   python3 scripts/download_instances.py paper --models --dest instances/paper   # instances + models/recent
+#   bash scripts/slurm/campaign.sh scripts/slurm/plans/paper.sh --submit
 #   bash scripts/slurm/collect.sh runs/paper
-# CAMPAIGN, INSTANCES and TIMEOUT can be changed in the environment.
+# CAMPAIGN, INSTANCES, TIMEOUT (1 hour per instance, the limit of the study), MODELS and USE_MODEL can be changed in
+# the environment.
 
 export CAMPAIGN=${CAMPAIGN:-paper}
 export INSTANCES=${INSTANCES:-instances/paper}
 export TIMEOUT=${TIMEOUT:-3600}
+export MODELS=${MODELS:-models/recent}
+export USE_MODEL=${USE_MODEL:-1}
 
-BEST=(cmxpd cmx cmxp mxp mx cmp)
-PARTITION=(d s c cd)
-DIVERSITY=(m x p)
+SEQUENTIAL=(c s m x p)
+SOLO=(c s d m x p)
+BEST=(cmxpd cmx cmxp mxp)
+BEST_4=(cmx cmxp mxp)
 
 with() { # <workers> <mixes...>: the configurations <mix>-<workers>
 	local n=$1 m
@@ -29,10 +35,9 @@ with() { # <workers> <mixes...>: the configurations <mix>-<workers>
 	for m; do printf '%s ' "$m-$n"; done
 }
 
-phase best -- $(with 16 "${BEST[@]}")
-phase partition -- $(with 16 "${PARTITION[@]}")
-phase partition D_MODE=walk -- d-16 cd-16
-phase sharing SHARE=no-clauses,no-backbones,no-free,none -- $(with 16 "${BEST[@]}")
-phase diversity -- $(with 16 "${DIVERSITY[@]}")
-phase scaling-8 -- $(with 8 "${BEST[@]}" "${PARTITION[@]}" "${DIVERSITY[@]}")
-phase scaling-4 -- $(with 4 "${BEST[@]}" "${PARTITION[@]}" "${DIVERSITY[@]}")
+phase sequential -- $(with 1 "${SEQUENTIAL[@]}")
+for n in 16 8 4; do
+	phase solo -- $(with $n "${SOLO[@]}")
+done
+phase best -- $(with 16 "${BEST[@]}") $(with 8 "${BEST[@]}") $(with 4 "${BEST_4[@]}")
+phase sharing SHARE=none -- $(with 16 "${BEST[@]}") $(with 8 "${BEST[@]}") $(with 4 "${BEST_4[@]}")
